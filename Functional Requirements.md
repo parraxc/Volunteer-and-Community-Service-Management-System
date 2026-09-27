@@ -8,16 +8,16 @@
 | Verison| 1.0 |
 
 ## Business Problem and Project Purpose 
-Nonprofit organizations need a centralized system for managing their volunteers and community service opportunities. 
+Nonprofit organizations need a centralized system for managing their volunteers and community service opportunities. Many organizations rely on tracking volunteers by simple spreadsheet tracking or on paper. Not only does this lead to inaccurate information, but it also makes reporting a volunteer's hours difficult and tedious. 
 
-The purpose of this project is to create a service where organizations can post their available volunteering shifts. It also manages volunteer registration and approval and maintains volunteers' information and hours completed by tracking volunteers' attendance. Organizations will be able to maintain text communication between volunteers. As well, organizations will be able to generate a report of their events for grants or impact reporting. 
+The purpose of this project is to create a relational database that allows organizations and their staff to maintain accurate volunteer information, sign up volunteers for volunteering shifts, track shift check-in and check-out, and record volunteer hours, look up volunteers by their skills, and produce reports for grant or impact reporting.
 
 | In scope | Out of scope |
 |---|---|
 | Volunteer contact information | Moblie application development|
-| Organizer information and event information | Outcome tracking |
-| User registration and approval |  |
-| Attendance Recording | |
+| Event and shift information | Outcome tracking |
+| Volunteer registration and approval | Public website development |
+| Attendance Recording |Online volunteer registration |
 | Role-Based Access | |
 | Audit Logs |  |
 | Operational reports and SQL queries | |
@@ -25,9 +25,9 @@ The purpose of this project is to create a service where organizations can post 
 ## Stakeholder and user roles   
 | Stakeholder | Responsibilities | Database needs |
 |---|---|---|
-|Organization Manager| Oversees events and event organizers | View and create  events, add event organizers, and view event organizer information |
-|Event Organizer|Leads an assigned event|Add volunteers and view volunteer information, record attendance, and view attendance information |
-|Organization Staff|Leads an assigned event|Add volunteers and view volunteer information, record attendance, and view attendance information |
+|Manager| Oversees events| View events, volunteers, and reports |
+|Event Organizer|Leads events|Add and update volunteer information, record attendance, add and update shifts|
+|Staff Members|Works with volunteers|View shift and volunteer information|
 |Volunteer| Volunteers at an event| Is represented in the database; does not directly use the database in the project |
 
 ## Functional requirements  
@@ -35,8 +35,9 @@ The purpose of this project is to create a service where organizations can post 
 |---|---|---|---|
 |FR-01|The system shall store one record for each event, its name and the date of the event |High| Event|
 | FR-02 | The system shall store one record for each volunteer, including name and contact information, background-check status |High| Volunteer|
-|FR-03|The system shall store one record for attendance; this includes the event date, the volunteer's ID, and the check-in and check-out times.|High|Event, Volunteer|
-|FR-04|The system shall store a record for the volunteer's skills. |Low| Volunteer, Skills|
+|FR-03|The system shall store one record for each shift, including its event, the shift's role, and capacity, its start time and end time.|High|Event, Volunteer|
+|FR-04|The system shall store one record for the total hours worked at an event by a volunteer. |High|Event, Volunteer|
+|FR-04|The system shall store a record for each skill of a volunteer. |Low| Volunteer, Skills|
 |FR-05|The system shall prevent the same volunteer from volunteering at the same event more than once|High| Attendance|
 |FR-06|The system shall prevent a volunteer who does not have a verified background check from volunteering | High |Volunteer, Attendance|
 
@@ -45,9 +46,9 @@ The purpose of this project is to create a service where organizations can post 
 | Data Subject | Information to Store | Example Identifies |
 |---|---|---|
 |Event|Event name, Event Date|EventID|
-|Shift|Start and end time of shift, role of the shift, shift capacity | ShiftID |
+|Shifts|Start and end time of shift, role of the shift, shift capacity | ShiftID |
 |Volunteer Shift|Volunteer, shift, check-in and check-out time, status of shift|Composite VolunteerID/ShiftID|
-| Volunteer | Volunteer name, phone number, email, background-checkstatus | VolunteerID|
+|Volunteer | Volunteer name, phone number, email, background-checkstatus | VolunteerID|
 |Volunteer Hours | Volunteer, event, Hours worked from event|Composite VolunteerID/EventID|
 |VolunteerSkills|Volunteer, Skills|Composite VolunteerID/SkillCode|
 |Skills|Skill, description of skill|SkillCode|
