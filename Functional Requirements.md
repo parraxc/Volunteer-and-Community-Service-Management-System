@@ -26,32 +26,40 @@ The purpose of this project is to create a relational database that allows organ
 | Stakeholder | Responsibilities | Database needs |
 |---|---|---|
 |Manager| Oversees events| View events, volunteers, and reports |
-|Event Organizer|Leads events|Add and update volunteer information, record attendance, add and update shifts|
+|Event Coordinator|Leads events|Add and update volunteer information, add and update shifts, record attendance, and approve volunteer hours|
 |Staff Members|Works with volunteers|View shift and volunteer information|
 |Volunteer| Volunteers at an event| Is represented in the database; does not directly use the database in the project |
 
 ## Functional requirements  
-| ID | Functional requirement | Priority | Related data/entites |
+| ID | Functional requirement | Priority | Related data/entities |
 |---|---|---|---|
 |FR-01|The system shall store one record for each event, its name and the date of the event |High| Event|
-| FR-02 | The system shall store one record for each volunteer, including name and contact information, background-check status |High| Volunteer|
-|FR-03|The system shall store one record for each shift, including its event, the shift's role, and capacity, its start time and end time.|High|Event, Volunteer|
-|FR-04|The system shall store one record for the total hours worked at an event by a volunteer. |High|Event, Volunteer|
-|FR-04|The system shall store a record for each skill of a volunteer. |Low| Volunteer, Skills|
-|FR-05|The system shall prevent the same volunteer from volunteering at the same event more than once|High| Attendance|
-|FR-06|The system shall prevent a volunteer who does not have a verified background check from volunteering | High |Volunteer, Attendance|
+|FR-02|The system shall store one record for each staff member, including name and role.| High |StaffMember|
+|FR-03| The system shall store one record for each volunteer, including name and contact information ,whether the volunteer’s background check is verified (yes/no) |High| Volunteer|
+|FR-04|The system shall store one record for each shift, including its event, the shift's role, and capacity, its start time and end time.|High|Event, Shift|
+|FR-05|The system shall store one record for one volunteer's assignment to and attendance for one shift, with a status, check-in time, and check-out time (VolunteerShift). |High|Shift, Volunteer, VolunteerShift|
+|FR-06|The system shall store one record for the total hours from one approved shift. |High|VolunteerHours, VolunteerShift|
+|FR-07|The system shall store a record for each of the volunteer's skills. |Low|Skill, VolunterSkill|
+|FR-08|The system shall prevent a volunteer from being assigned to the same shift more than once.|High| Volunteer, VolunteerShift|
+|FR-09|The system shall prevent a volunteer who does not have a verified background check from being assigned a shift. | High |Volunteer, VolunteerShift|
+|FR-10|The system shall prevent a volunteer from being assigned to overlapping shifts. | High |Shift, VolunteerShift|
+|FR-11|The system shall prevent a volunteer from being assigned to a shift at full capacity. | High |Shift, VolunteerShift|
+|FR-12|The system shall allow an Event Coordinator to approve a volunteer’s hours for a completed shift. | High |VolunteerHours, VolunteerShift)|
+|FR-13|The system shall add a volunteer’s hours to VolunteerHours when an Event Coordinator approves the hours for a completed shift.| High |StaffMember, VolunteerShift|
+|FR-14|The system shall only the assigned Event Coordinator to approve the hours for a completed shift.| High |StaffMember, VolunteerShift|
 
 
 ## Data Requirements
 | Data Subject | Information to Store | Example Identifies |
 |---|---|---|
 |Event|Event name, Event Date|EventID|
-|Shifts|Start and end time of shift, role of the shift, shift capacity | ShiftID |
-|Volunteer Shift|Volunteer, shift, check-in and check-out time, status of shift|Composite VolunteerID/ShiftID|
-|Volunteer | Volunteer name, phone number, email, background-checkstatus | VolunteerID|
-|Volunteer Hours | Volunteer, event, Hours worked from event|Composite VolunteerID/EventID|
-|VolunteerSkills|Volunteer, Skills|Composite VolunteerID/SkillCode|
-|Skills|Skill, description of skill|SkillCode|
+|Shift|Start and end time of shift, role of the shift, shift capacity | ShiftID |
+|Volunteer| Volunteer name, phone number, email, background-check status (yes/no)| VolunteerID|
+|StaffMemeber|Stafff memeber name and role of the staff memeber|SkillCode|
+|VolunteerShift|Volunteer, shift, check-in and check-out time, status of shift|Composite VolunteerID/ShiftID|
+|VolunteerHours | Volunteer, event, Hours worked from event|Composite VolunteerID/EventID|
+|VolunteerSkill|Volunteer, Skills|Composite VolunteerID/SkillCode|
+|Skill|Skill, description of skill|SkillCode|
 
 ## Business rules and Validation rules
 | ID | Business Rule | Possible database enforcement |
