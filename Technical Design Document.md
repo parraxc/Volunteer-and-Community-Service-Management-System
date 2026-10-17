@@ -12,7 +12,7 @@ manage [main data subjects]. It will use [DBMS/platform] and will support [major
 reports, or processes]. The design consists of approximately [number] related tables and enforces
 data integrity through primary keys, foreign keys, unique constraints, check constraints, and/or database procedures. 
 
-# 3. Technical environment**
+# 3. Technical environment
 | Componet | Selected technology/tool | Purpose |
 |---|---|---|
 |Database management system| | |
@@ -21,15 +21,15 @@ data integrity through primary keys, foreign keys, unique constraints, check con
 |Source control, if used| | |
 |Operating Environment| | |
 
-# 4. Architecture and scope**
+# 4. Architecture and scope
 
-# 5. Entity-relationship design**
+# 5. Entity-relationship design
 
-# 6. Relational schema**
+# 6. Relational schema
 
-# 7. Table and attribute specifications**
+# 7. Table and attribute specifications
 
-# 8. Normalization analysis**
+# 8. Normalization analysis
 
 # 9. Integrity, validation, and business-rule enforcement 
 
