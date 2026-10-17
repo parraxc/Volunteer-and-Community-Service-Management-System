@@ -5,7 +5,7 @@
 | Project title | Volunteer and Community Service Management System|
 | Prepared by | Christian Parra, Prabhas Penumatsa|
 | Course | CS 437: Database Systems Implementation |
-| Verison| 1.0 |
+| Version| 1.1 |
 
 ## Business Problem and Project Purpose 
 Nonprofit organizations need a centralized system for managing their volunteers and community service opportunities. Many organizations rely on tracking volunteers by simple spreadsheet tracking or on paper. Not only does this lead to inaccurate information, but it also makes reporting a volunteer's hours difficult and tedious. 
@@ -33,50 +33,57 @@ The purpose of this project is to create a relational database that allows organ
 ## Functional requirements  
 | ID | Functional requirement | Priority | Related data/entities |
 |---|---|---|---|
-|FR-01|The system shall store one record for each event, its name and the date of the event |High| Event|
+|FR-01|The system shall store one record for each event, its name and the date of the event, and the assigned Event Coordinator |High| Event, StaffMember|
 |FR-02|The system shall store one record for each staff member, including name and role.| High |StaffMember|
-|FR-03| The system shall store one record for each volunteer, including name and contact information ,whether the volunteer’s background check is verified (yes/no) |High| Volunteer|
-|FR-04|The system shall store one record for each shift, including its event, the shift's role, and capacity, its start time and end time.|High|Event, Shift|
+|FR-03| The system shall store one record for each volunteer, including name, contact information, and whether the volunteer’s background check is verified (yes/no). |High| Volunteer|
+|FR-04|The system shall store one record for each shift, including its event, role, capacity, start date/time, and end date/time|High|Event, Shift|
 |FR-05|The system shall store one record for one volunteer's assignment to and attendance for one shift, with a status, check-in time, and check-out time (VolunteerShift). |High|Shift, Volunteer, VolunteerShift|
 |FR-06|The system shall store one record for the total hours from one approved shift. |High|VolunteerHours, VolunteerShift|
-|FR-07|The system shall store a record for each of the volunteer's skills. |Low|Skill, VolunterSkill|
+|FR-07|The system shall store a record for each of the volunteer's skills. |Low|Skill, VolunteerSkill|
 |FR-08|The system shall prevent a volunteer from being assigned to the same shift more than once.|High| Volunteer, VolunteerShift|
 |FR-09|The system shall prevent a volunteer who does not have a verified background check from being assigned a shift. | High |Volunteer, VolunteerShift|
 |FR-10|The system shall prevent a volunteer from being assigned to overlapping shifts. | High |Shift, VolunteerShift|
 |FR-11|The system shall prevent a volunteer from being assigned to a shift at full capacity. | High |Shift, VolunteerShift|
-|FR-12|The system shall allow an Event Coordinator to approve a volunteer’s hours for a completed shift. | High |VolunteerHours, VolunteerShift)|
-|FR-13|The system shall add a volunteer’s hours to VolunteerHours when an Event Coordinator approves the hours for a completed shift.| High |StaffMember, VolunteerShift|
-|FR-14|The system shall only the assigned Event Coordinator to approve the hours for a completed shift.| High |StaffMember, VolunteerShift|
+|FR-12|The system shall allow an Event Coordinator to approve a volunteer’s hours for a completed shift. | High |Event, StaffMember, VolunteerShift|
+|FR-13|The system shall add a volunteer’s hours to VolunteerHours when an Event Coordinator approves the hours for a completed shift.| High |VolunteerHours, VolunteerShift|
+|FR-14|The system shall only allow the Event Coordinator assigned to an event to approve the hours for that event's completed shift.| High |StaffMember, VolunteerShift|
 
 
 ## Data Requirements
 | Data Subject | Information to Store | Example Identifies |
 |---|---|---|
-|Event|Event name, Event Date|EventID|
-|Shift|Start and end time of shift, role of the shift, shift capacity | ShiftID |
-|Volunteer| Volunteer name, phone number, email, background-check status (yes/no)| VolunteerID|
-|StaffMemeber|Stafff memeber name and role of the staff memeber|SkillCode|
-|VolunteerShift|Volunteer, shift, check-in and check-out time, status of shift|Composite VolunteerID/ShiftID|
-|VolunteerHours | Volunteer, event, Hours worked from event|Composite VolunteerID/EventID|
-|VolunteerSkill|Volunteer, Skills|Composite VolunteerID/SkillCode|
+|Event|Event name, event date, event coordinator|EventID|
+|Shift|Date/time,, role of the shift, shift capacity | ShiftID |
+|Volunteer| Volunteer name, phone number, email, background-check verified (yes/no)| VolunteerID|
+|StaffMember| Staff member name and role of the staff member | StaffID |
+|VolunteerShift|Volunteer, shift, check-in and check-out time, status of shift(Scheduled, In-Progress, Completed, No-Show), approved by event coordinator|Composite VolunteerID/ShiftID|
+|VolunteerHours | Volunteer, shift, hours worked per shift|Composite VolunteerID/ShiftID|
 |Skill|Skill, description of skill|SkillCode|
+|VolunteerSkill|Volunteer, skill|Composite VolunteerID/SkillCode|
 
 ## Business rules and Validation rules
 | ID | Business Rule | Possible database enforcement |
 |---|---|---|
 |BR-01| Every event must have a unique Event ID. | Primary key on Event |
 |BR-02| Each volunteer must have a unique Volunteer ID | Primary key on Volunteer  |
-|BR-03| Each shift must be assigned to one event | Foreign key from Shift to Event |
-|BR-04| A volunteer can sign up for many shifts and a shift may have many volunteers | VolunteerShift junction table |
-|BR-05| A volunteer may work in a specific shift no more than once| UNIQUE constraint on VolunteerShift (VolunteerID/ShiftID) |
-|BR-06| Only volunteers with a completed background check can work in a shift | Controlled VolunteerShift procedure |
-|BR-07| A VolunteerShift count for a shift may not exceed the shift capacity  |Query/procedure/trigger logic before logic |
-|BR-08| Check-in and check-out time is only recorded for a volunteer who is signed for that shift | Foreign key to VolunteerShift|
-|BR-09| A check-in time must occur after or on the shift's start time | CHECK constraint |
-|BR-10| A VolunteerShift's status must be one of No-Show, In-Progress, or Completed | CHECK constraint |
-|BR-11| A volunteer's completed hours are added to VolunteerHours only after the status is Completed |Controlled insert logic|
-|BR-12| A volunteer's completed hours must be greater than zero | CHECK constraint |
+|BR-03| Each shift must be assigned to one event | NOT NULL foreign key from Shift to Event |
+|BR-04| A volunteer can sign up for many shifts and a shift may have many volunteers | VolunteerShift junction table with foreign keys to Volunteer and Shift|
+|BR-05| A volunteer cannot be assigned to the same shift more than once.| Composite primary key on VolunteerShift|
+|BR-06| Only volunteers with a verified background check can work a shift | BEFORE INSERT trigger |
+|BR-07| The number of volunteer assignments for a shift must not exceed that shift’s capacity|Transactional stored procedure|
+|BR-08| Check-in and check-out time is only recorded for a volunteer who is signed for that shift |Composite primary key with foreign key |
+|BR-09| A check-in time must occur after or on the shift's start time | Trigger procedure |
+|BR-10| A VolunteerShift's status must be one of No-Show, Scheduled, or Completed | CHECK constraint |
+|BR-11| VolunteerHours record is created only when the assignment is Completed and has been approved|A stored procedure that records the approval and inserts the hours in one transaction |
+|BR-12| A volunteer's completed hours must be greater than zero | CHECK (HoursWorked > 0) |
 |BR-13| A volunteer may have more than one skill, and a skill may have multiple volunteers | VolunteerSkills junction table|
+|BR-14| A volunteer can’t be assigned to two overlapping shifts (back-to-back shifts are allowed)| BEFORE INSERT trigger on VolunteerShift|
+|BR-15| An assignment’s status must agree with its recorded times: Scheduled and No-Show have none, In-Progress has check-in only, Completed has both.| Same-row CHECK on VolunteerShift |
+|BR-16| Status must match the recorded times (Completed needs both times; In-Progress needs a check-in and no check-out)|Same-row CHECK constraint on VolunteerShift |
+|BR-17| A check-out time must be later than the check-in time.| Same-row CHECK on VolunteerShift |
+|BR-18| Only an assignment with status Scheduled may be deleted.| Only an assignment with status Scheduled may be deleted. |
+|BR-19| Hours may be approved only for a Completed shift, and only by the Event Coordinator assigned to that shift’s event.| Stored procedure ApproveHours that validates both conditions, then records approved-by and approved-at|
+|BR-20| When hours are approved, one VolunteerHours record is created for that assignment, with hours worked equal to check-out minus check-in.| Same stored procedure, in a single transaction with the approval|
 
 ## Reports and Queries
 
