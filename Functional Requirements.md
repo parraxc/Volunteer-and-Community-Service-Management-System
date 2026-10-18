@@ -69,7 +69,7 @@ V = view, A = add, U = update, X = execute. No role can delete records.
 | Data Subject | Information to Store | Example Identifies |
 |---|---|---|
 |Event|Event name, event date, event coordinator|EventID|
-|Shift|Date/time,, role of the shift, shift capacity | ShiftID |
+|Shift|Check-in/check-out time, role of the shift, shift capacity | ShiftID |
 |Volunteer| Volunteer name, phone number, email, background-check verified (yes/no)| VolunteerID|
 |StaffMember| Staff member name and role of the staff member, database login name| StaffID |
 |VolunteerShift|Volunteer, shift, check-in and check-out time, status of shift(Scheduled, In-Progress, Completed, No-Show), approved by event coordinator|Composite VolunteerID/ShiftID|
