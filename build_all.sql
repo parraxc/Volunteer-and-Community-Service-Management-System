@@ -10,6 +10,7 @@ USE volunteer_db;
 -- ===== volunteer_DB/01_tables/tables.sql =====
 
 CREATE TABLE StaffMember (
+    StaffID INT AUTO_INCREMENT PRIMARY KEY,
     StaffName VARCHAR(100) NOT NULL,
     StaffRole VARCHAR(20) NOT NULL,
     DbUsername VARCHAR(32) NOT NULL UNIQUE,
