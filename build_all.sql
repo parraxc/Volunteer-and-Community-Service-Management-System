@@ -1,5 +1,15 @@
+DROP DATABASE IF EXISTS volunteer_db;
+CREATE DATABASE volunteer_db;
+USE volunteer_db;
+
+-- ===== volunteer_DB/01_tables/tables.sql =====
+DROP DATABASE IF EXISTS volunteer_db;
+CREATE DATABASE volunteer_db;
+USE volunteer_db;
+
+-- ===== volunteer_DB/01_tables/tables.sql =====
+
 CREATE TABLE StaffMember (
-    StaffID INT AUTO_INCREMNET PRIMARY KEY,
     StaffName VARCHAR(100) NOT NULL,
     StaffRole VARCHAR(20) NOT NULL,
     DbUsername VARCHAR(32) NOT NULL UNIQUE,
@@ -9,15 +19,15 @@ CREATE TABLE StaffMember (
 );
 
 CREATE TABLE Event (
-    EventID INT AUTO_INCREMNET PRIMARY KEY,
+    EventID INT AUTO_INCREMENT PRIMARY KEY,
     EventName VARCHAR(150) NOT NULL,
     EventDate DATE NOT NULL, 
     CoordinatorID INT,
-    FOREIGN KEY (Event_Coordinator) REFERENCES StaffMember (StaffID)
+    FOREIGN KEY (CoordinatorID) REFERENCES StaffMember (StaffID)
 );
 
 CREATE TABLE Shift(
-    ShiftID INT AUTO_INCREMNET PRIMARY KEY,
+    ShiftID INT AUTO_INCREMENT PRIMARY KEY,
     EventID INT NOT NULL,
     ShiftRole VARCHAR(100) NOT NULL,
     Capacity INT NOT NULL,
@@ -31,11 +41,11 @@ CREATE TABLE Shift(
 );
 
 CREATE TABLE Volunteer(
-    VolunteerID INT AUTO_INCREMNET PRIMARY KEY,
+    VolunteerID INT AUTO_INCREMENT PRIMARY KEY,
     VolunteerName VARCHAR(100) NOT NULL,
     VolunteerPhoneNumber INT NOT NULL,
     VolunteerEmail VARCHAR(100) NOT NULL,
-    BackgroundCheck BOOLEAN NOT NULL DEFAULT FALSE,
+    BackgroundCheck BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE TABLE VolunteerShift(
@@ -48,7 +58,7 @@ CREATE TABLE VolunteerShift(
     ApprovedBy INT NULL,
     ApprovedAt DATETIME NULL,
     PRIMARY KEY (VolunteerID, ShiftID),
-    FOREIGN KEY (VolunterID) REFERENCES Volunteer(VolunteerID),
+    FOREIGN KEY (VolunteerID) REFERENCES Volunteer(VolunteerID),
     FOREIGN KEY (ShiftID) REFERENCES Shift(ShiftID),
     FOREIGN KEY (ApprovedBy) REFERENCES StaffMember(StaffID),
 
@@ -57,9 +67,9 @@ CREATE TABLE VolunteerShift(
     
     CONSTRAINT chk_vshift_status_time CHECK (
         (Status IN ('Scheduled','No-Show','Cancelled') AND CheckInTime IS NULL AND CheckInTime IS NULL)
-        OR (Status = 'In-Progress' AND CheckInTime IS NOT NULL AND CheckOutTime IS NULL),
-        OR (Status = 'Completed' AND CheckInTime IS NOT NULL AND CheckOutTime IS NOT NULL),
-    )
+        OR (Status = 'In-Progress' AND CheckInTime IS NOT NULL AND CheckOutTime IS NULL)
+        OR (Status = 'Completed' AND CheckInTime IS NOT NULL AND CheckOutTime IS NOT NULL)
+    ),
 
     CONSTRAINT chk_vshift_checkout CHECK (CheckOutTime > CheckInTime),
 
@@ -75,7 +85,7 @@ CREATE TABLE VolunteerHours(
 
     PRIMARY KEY (VolunteerID, ShiftID),
     FOREIGN KEY (VolunteerID) REFERENCES Volunteer(VolunteerID),
-    FOREIGN KEY (ShiftID) REFERENCES Shift(ShiftID)
+    FOREIGN KEY (ShiftID) REFERENCES Shift(ShiftID),
     CONSTRAINT chk_vhours CHECK (HoursWorked > 0)
 
 );
@@ -102,5 +112,91 @@ CREATE TABLE AuditLog(
     ChangedBy   VARCHAR(100) NULL,
     ChangedAt   DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     OldValues   JSON NULL,
-    NewValues   JSON NULL,
+    NewValues   JSON NULL
 );
+
+-- ===== volunteer_DB/02_triggers/01_event_triggers.sql =====
+DELIMITER $$
+
+CREATE TRIGGER eventcordinator_assign_insert
+BEFORE INSERT ON Event
+FOR EACH ROW 
+BEGIN
+    DECLARE staff_role VARCHAR(20);
+
+    SELECT StaffRole INTO staff_role
+    FROM StaffMember
+    WHERE StaffID = NEW.CoordinatorID;
+
+    IF(staff_role != 'Event Coordinator' ) THEN
+        SIGNAL SQLSTATE '45500'
+        SET MESSAGE_TEXT = "Assigned staff memeber is not a 
+        event coordinator";
+    END IF;
+END $$
+
+CREATE TRIGGER eventcordinator_assign_update
+BEFORE UPDATE ON Event
+FOR EACH ROW 
+BEGIN
+
+    DECLARE staff_role VARCHAR(20);
+
+    SELECT StaffRole INTO staff_role
+    FROM StaffMember
+    WHERE StaffID = NEW.CoordinatorID.
+
+    IF(staff_role != 'Event Coordinator' ) THEN
+        SIGNAL SQLSTATE '45500'
+        SET MESSAGE_TEXT = "Assigned staff memeber is not a 
+        event coordinator".
+    END IF;
+END $$
+
+DELIMITER ;
+
+    
+    
+
+-- ===== volunteer_DB/02_triggers/02_shift_triggers.sql =====
+DELIMITER $$
+
+CREATE TRIGGER constanst_dates_insert
+BEFORE INSERT ON Shift
+FOR EACH ROW 
+BEGIN 
+    DECLARE event_date DATE;
+
+    SELECT EventDate INTO event_date
+    FROM Event
+    WHERE EventID = NEW.EventID;
+
+    IF DATE(NEW.StartDateTime) <> event_date AND 
+    DATE(NEW.EndDateTime <> event_date) THEN
+        SIGNAL SQLSTATE '45500'
+        SET MESSAGE_TEXT = "Insert shift's date,
+        does match event's date ";
+    END IF;
+END $$
+
+CREATE TRIGGER constanst_dates_update
+BEFORE UPDATE ON Shift
+FOR EACH ROW 
+BEGIN 
+    DECLARE event_date DATE;
+
+    SELECT EventDate INTO event_date
+    FROM Event
+    WHERE EventID = NEW.EventID;
+
+    IF DATE(NEW.StartDateTime) <> event_date AND 
+    DATE(NEW.EndDateTime <> event_date) THEN
+        SIGNAL SQLSTATE '45500'
+        SET MESSAGE_TEXT = "Insert shift's date,
+        does match event's date ";
+    END IF;
+END $$
+
+DELIMITER ;
+
+
