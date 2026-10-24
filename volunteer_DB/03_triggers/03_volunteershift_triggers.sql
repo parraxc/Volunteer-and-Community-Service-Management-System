@@ -67,6 +67,7 @@ FOR EACH ROW
     DECLARE eventDate DATE;
     DECLARE currentassignments INT DEFAULT 0;
     DECLARE overlapping INT DEFAULT 0;
+    DECLARE v_derived VARCHAR(12);
 
     IF (OLD.Approved ATIS NOT NULL) THEN 
         SIGNAL SQLSTATE '45500'
@@ -79,11 +80,11 @@ FOR EACH ROW
     END IF;
 
     IF NEW.Status <> OLD.Status
-       AND NOT (   (OLD.Status = 'Scheduled'   AND NEW.Status IN ('In-Progress', 'No-Show', 'Cancelled'))
+       AND NOT (   (OLD.Status = 'Scheduled'   AND NEW.Status IN ('In-Progress', 'No-Show', 'Cancelled','Completed')))
                 OR (OLD.Status = 'In-Progress' AND NEW.Status = 'Completed')
                 OR (OLD.Status = 'Cancelled'   AND NEW.Status = 'Scheduled')) THEN
             SIGNAL SQLSTATE '45000'
-            SET MESSAGE_TEXT = 'BR-19: invalid status change';
+            SET MESSAGE_TEXT = 'Invalid status change';
     END IF;
 
     SELECT s.StartDateTime, s.EndDateTime, e.EventDate

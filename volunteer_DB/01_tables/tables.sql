@@ -100,13 +100,17 @@ CREATE TABLE VolunteerSkill(
     FOREIGN KEY (SkillCode) REFERENCES Skill(SkillCode)
 );
 
-CREATE TABLE AuditLog(
-    Id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    TableName   VARCHAR(64) NOT NULL,
-    Operation   ENUM('INSERT', 'UPDATE') NOT NULL,
-    RecordId    VARCHAR(100) NOT NULL,
-    ChangedBy   VARCHAR(100) NULL,
-    ChangedAt   DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-    OldValues   JSON NULL,
-    NewValues   JSON NULL
+CREATE TABLE AuditLog (
+    AuditID          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    TableName        VARCHAR(64)  NOT NULL,
+    Operation        ENUM('INSERT', 'UPDATE') NOT NULL,
+    RecordId         VARCHAR(100) NOT NULL,
+    ChangedBy        VARCHAR(288) NOT NULL,
+    ChangedByStaffID INT          NULL,
+    ChangedAt        DATETIME(6)  NOT NULL,
+    OldValues        JSON         NULL,
+    NewValues        JSON         NOT NULL,
+    FOREIGN KEY (ChangedByStaffID) REFERENCES StaffMember (StaffID),
+    INDEX idx_audit_record (TableName, RecordId, ChangedAt),
+    INDEX idx_audit_staff  (ChangedByStaffID, ChangedAt)
 );
