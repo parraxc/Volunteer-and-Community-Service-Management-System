@@ -2,6 +2,11 @@ DROP DATABASE IF EXISTS volunteer_db;
 CREATE DATABASE volunteer_db;
 USE volunteer_db;
 
+-- ===== volunteer_DB/00_setup/account.sql =====
+DROP USER IF EXISTS 'volunteer_proc'@'localhost';
+CREATE USER 'volunteer_proc'@'localhost' ACCOUNT LOCK;
+
+
 -- ===== volunteer_DB/01_tables/tables.sql =====
 DROP DATABASE IF EXISTS volunteer_db;
 CREATE DATABASE volunteer_db;
@@ -44,7 +49,7 @@ CREATE TABLE Shift(
 CREATE TABLE Volunteer(
     VolunteerID INT AUTO_INCREMENT PRIMARY KEY,
     VolunteerName VARCHAR(100) NOT NULL,
-    VolunteerPhoneNumber INT NOT NULL,
+    VolunteerPhoneNumber VARCHAR(20) NOT NULL,
     VolunteerEmail VARCHAR(100) NOT NULL,
     BackgroundCheck BOOLEAN NOT NULL DEFAULT FALSE
 );
@@ -67,7 +72,7 @@ CREATE TABLE VolunteerShift(
         (Status IN ('Scheduled', 'In-Progress', 'Completed', 'No-Show', 'Cancelled')),
     
     CONSTRAINT chk_vshift_status_time CHECK (
-        (Status IN ('Scheduled','No-Show','Cancelled') AND CheckInTime IS NULL AND CheckInTime IS NULL)
+        (Status IN ('Scheduled','No-Show','Cancelled') AND CheckInTime IS NULL AND CheckOutTime IS NULL)
         OR (Status = 'In-Progress' AND CheckInTime IS NOT NULL AND CheckOutTime IS NULL)
         OR (Status = 'Completed' AND CheckInTime IS NOT NULL AND CheckOutTime IS NOT NULL)
     ),
@@ -105,52 +110,279 @@ CREATE TABLE VolunteerSkill(
     FOREIGN KEY (SkillCode) REFERENCES Skill(SkillCode)
 );
 
-CREATE TABLE AuditLog(
-    Id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    TableName   VARCHAR(64) NOT NULL,
-    Operation   ENUM('INSERT', 'UPDATE') NOT NULL,
-    RecordId    VARCHAR(100) NOT NULL,
-    ChangedBy   VARCHAR(100) NULL,
-    ChangedAt   DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-    OldValues   JSON NULL,
-    NewValues   JSON NULL
+CREATE TABLE AuditLog (
+    AuditID          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    TableName        VARCHAR(64)  NOT NULL,
+    Operation        ENUM('INSERT', 'UPDATE') NOT NULL,
+    RecordId         VARCHAR(100) NOT NULL,
+    ChangedBy        VARCHAR(288) NOT NULL,
+    ChangedByStaffID INT          NULL,
+    ChangedAt        DATETIME(6)  NOT NULL,
+    OldValues        JSON         NULL,
+    NewValues        JSON         NOT NULL,
+    FOREIGN KEY (ChangedByStaffID) REFERENCES StaffMember (StaffID),
+    INDEX idx_audit_record (TableName, RecordId, ChangedAt),
+    INDEX idx_audit_staff  (ChangedByStaffID, ChangedAt)
 );
 
--- ===== volunteer_DB/02_triggers/01_event_triggers.sql =====
+-- ===== volunteer_DB/02_routines/01_save_assigment_procedure.sql =====
 DELIMITER $$
 
-CREATE TRIGGER eventcordinator_assign_insert
+CREATE DEFINER = 'volunteer_proc'@'localhost' PROCEDURE SaveAssignment (
+    IN p_VolunteerID  INT,
+    IN p_ShiftID      INT,
+    IN p_Status       VARCHAR(12),   
+    IN p_CheckInTime  DATETIME,      
+    IN p_CheckOutTime DATETIME       
+)
+SQL SECURITY DEFINER
+BEGIN
+    DECLARE staffID INT;
+    DECLARE staffRole     VARCHAR(20);
+    DECLARE volunteerID     INT;
+    DECLARE shiftID    INT;
+    DECLARE existing INT;
+    DECLARE actiontaken   VARCHAR(10);
+
+    DECLARE EXIT HANDLER FOR 1205, 1213
+    BEGIN
+        ROLLBACK;
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Lock conflict: nothing was saved, retry the whole operation';
+    END;
+
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    SELECT StaffID, StaffRole INTO staffId, staffRole
+    FROM StaffMember
+    WHERE DbUsername COLLATE utf8mb4_bin = SUBSTRING_INDEX(USER(), '@', 1);
+
+    IF staffID IS NULL OR staffRole <> 'Event Coordinator' THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Caller is not a registered Event Coordinator';
+    END IF;
+
+    IF p_Status IS NOT NULL
+       AND p_Status NOT IN ('Scheduled', 'In-Progress', 'Completed', 'No-Show', 'Cancelled') THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Unknown assignment status';
+    END IF;
+
+
+    START TRANSACTION;
+
+    SELECT VolunteerID INTO volunteerID
+    FROM Volunteer
+    WHERE VolunteerID = p_VolunteerID
+    FOR UPDATE;
+
+    IF volunteerID IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Volunteer not found';
+    END IF;
+
+    SELECT ShiftID INTO shiftID
+    FROM Shift
+    WHERE ShiftID = p_ShiftID
+    FOR UPDATE;
+
+    IF shiftID IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Shift not found';
+    END IF;
+
+    SELECT VolunteerID INTO existing
+    FROM VolunteerShift
+    WHERE VolunteerID = p_VolunteerID AND ShiftID = p_ShiftID
+    FOR UPDATE;
+
+    
+    IF existing IS NULL THEN 
+        IF (p_Status IS NOT NULL AND p_Status <> 'Scheduled')
+           OR p_CheckInTime IS NOT NULL OR p_CheckOutTime IS NOT NULL THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'A new assignment must be Scheduled with no attendance times';
+        END IF;
+
+        INSERT INTO VolunteerShift (VolunteerID, ShiftID)
+        VALUES (p_VolunteerID, p_ShiftID);
+
+        SET actiontaken = 'ASSIGNED';
+    ELSE
+        IF p_Status IS NULL AND p_CheckInTime IS NULL AND p_CheckOutTime IS NULL THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Assignment already exists (pass status Scheduled to reactivate a cancelled one)';
+        END IF;
+
+        UPDATE VolunteerShift
+        SET Status       = COALESCE(p_Status, Status),
+            CheckInTime  = COALESCE(p_CheckInTime, CheckInTime),
+            CheckOutTime = COALESCE(p_CheckOutTime, CheckOutTime)
+        WHERE VolunteerID = p_VolunteerID AND ShiftID = p_ShiftID;
+
+        SET actiontaken = 'UPDATED';
+    END IF;
+
+    COMMIT;
+
+    SELECT actiontaken AS Result, VolunteerID, ShiftID, Status, CheckInTime, CheckOutTime
+    FROM VolunteerShift
+    WHERE VolunteerID = p_VolunteerID AND ShiftID = p_ShiftID;
+END $$
+
+DELIMITER ;
+
+-- ===== volunteer_DB/02_routines/02_apporve_hours_procedures.sql =====
+DELIMITER $$
+
+CREATE PROCEDURE ApproveHours (IN p_volunteerID INT, IN p_shiftID INT) 
+SQL SECURITY DEFINER 
+BEGIN 
+    DECLARE staffID    INT;
+    DECLARE staffRole   VARCHAR(20);
+    DECLARE volunteerLocked   INT;
+    DECLARE eventID    INT;
+    DECLARE coordID    INT;
+    DECLARE volunteerStatus      VARCHAR(12);
+    DECLARE checkIn    DATETIME;
+    DECLARE checkOut   DATETIME;
+    DECLARE approvedAt DATETIME(6);
+    DECLARE totalHours       DECIMAL(8,2);
+
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION 
+    BEGIN 
+        ROLLBACK;
+        RESIGNAL;
+    END;
+    
+    SELECT StaffID, StaffRole INTO staffID, staffRole
+    FROM StaffMember
+    WHERE DbUsername COLLATE utf8mb4_bin = SUBSTRING_INDEX(USER(), '@', 1);
+
+    IF staffID IS NULL OR staffRole <> 'Event Coordinator' THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Caller is not a registered Event Coordinator';
+    END IF;
+
+
+    START TRANSACTION;
+
+    SELECT VolunteerID INTO volunteerLocked
+    FROM Volunteer
+    WHERE VolunteerID = p_VolunteerID
+    FOR UPDATE;
+
+    SELECT EventID INTO eventID
+    FROM Shift
+    WHERE ShiftID = p_shiftID
+    FOR UPDATE;
+
+    SELECT CoordinatorID INTO coordID
+    FROM Event
+    WHERE EventID = event_id
+    FOR UPDATE;
+
+    SELECT Status, CheckInTime, CheckOutTime, ApprovedAt
+      INTO volunteerStatus, checkIn, checkOut, approvedAt
+    FROM VolunteerShift
+    WHERE VolunteerID = p_VolunteerID AND ShiftID = p_shiftID
+    FOR UPDATE;
+
+    IF volunteerStatus IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Assignment not found';
+    END IF;
+
+     IF coord_id <> staffID THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Only the event''s assigned Event Coordinator can approve these hours';
+    END IF;
+
+     IF volunteerStatus <> 'Completed' OR checkIn IS NULL OR checkOut IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Only a Completed assignment can be approved';
+    END IF;
+
+    IF approvedAt IS NOT NULL
+       OR EXISTS (SELECT 1 FROM VolunteerHours
+                  WHERE VolunteerID = p_VolunteerID AND ShiftID = p_ShiftID) THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Hours for this assignment are already approved';
+    END IF;
+
+    SET totalHours = ROUND(TIMESTAMPDIFF(SECOND, checkIN, checkOut) / 3600.0, 2);
+
+    IF totalHours <= 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Attendance is too short to record approved hours';
+    END IF;
+
+    UPDATE VolunteerShift
+    SET ApprovedBy = staffID,
+        ApprovedAt = UTC_TIMESTAMP(6)
+    WHERE VolunteerID = p_VolunteerID AND ShiftID = p_ShiftID;
+
+    INSERT INTO VolunteerHours (VolunteerID, ShiftID, HoursWorked)
+    VALUES (p_VolunteerID, p_ShiftID, totalHours);
+
+    COMMIT;
+
+     SELECT p_VolunteerID AS VolunteerID,
+            p_ShiftID     AS ShiftID,
+            totalHours       AS HoursApproved;
+
+END $$
+
+DELIMITER ;
+
+
+-- ===== volunteer_DB/03_triggers/01_event_triggers.sql =====
+DELIMITER $$
+
+CREATE TRIGGER Event_before_insert
 BEFORE INSERT ON Event
 FOR EACH ROW 
 BEGIN
-    DECLARE staff_role VARCHAR(20);
+    DECLARE is_coord INT DEFAULT(0);
 
-    SELECT StaffRole INTO staff_role
+    SELECT COUNT(*) INTO is_coord
     FROM StaffMember
-    WHERE StaffID = NEW.CoordinatorID;
+    WHERE StaffID = NEW.CoordinatorID
+        AND StaffRole = 'Event Coordinator';
 
-    IF(staff_role != 'Event Coordinator' ) THEN
-        SIGNAL SQLSTATE '45500'
-        SET MESSAGE_TEXT = "Assigned staff memeber is not a 
-        event coordinator";
+    IF (is_coord = 0) THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = "Assigned staff member is not a event coordinator";
     END IF;
+
 END $$
 
-CREATE TRIGGER eventcordinator_assign_update
+CREATE TRIGGER Event_before_update
 BEFORE UPDATE ON Event
-FOR EACH ROW 
+FOR EACH ROW
 BEGIN
+    DECLARE is_coord INT DEFAULT 0;
+    DECLARE has_shift INT DEFAULT 0;
 
-    DECLARE staff_role VARCHAR(20);
-
-    SELECT StaffRole INTO staff_role
+    SELECT COUNT(*) INTO is_coord
     FROM StaffMember
-    WHERE StaffID = NEW.CoordinatorID.
+    WHERE StaffID = NEW.CoordinatorID
+      AND StaffRole = 'Event Coordinator';
 
-    IF(staff_role != 'Event Coordinator' ) THEN
-        SIGNAL SQLSTATE '45500'
-        SET MESSAGE_TEXT = "Assigned staff memeber is not a 
-        event coordinator".
+    SELECT COUNT(*) INTO has_shift
+    FROM Shift
+    WHERE EventID = OLD.EventID;
+
+    IF (is_coord = 0) THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Assigned staff member is not an Event Coordinator';
+    END IF;
+
+    IF NOT (NEW.EventDate <=> OLD.EventDate) AND has_shift > 0 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Event date cannot be changed once the event has shifts';
     END IF;
 END $$
 
@@ -159,10 +391,10 @@ DELIMITER ;
     
     
 
--- ===== volunteer_DB/02_triggers/02_shift_triggers.sql =====
+-- ===== volunteer_DB/03_triggers/02_shift_triggers.sql =====
 DELIMITER $$
 
-CREATE TRIGGER constanst_dates_insert
+CREATE TRIGGER Shift_before_insert
 BEFORE INSERT ON Shift
 FOR EACH ROW 
 BEGIN 
@@ -172,32 +404,490 @@ BEGIN
     FROM Event
     WHERE EventID = NEW.EventID;
 
-    IF DATE(NEW.StartDateTime) <> event_date AND 
-    DATE(NEW.EndDateTime <> event_date) THEN
-        SIGNAL SQLSTATE '45500'
-        SET MESSAGE_TEXT = "Insert shift's date,
-        does match event's date ";
+    IF DATE(NEW.StartDateTime) <> event_date  
+    OR DATE(NEW.EndDateTime) <> event_date THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = "Insert shift's date, does not match event's date ";
     END IF;
 END $$
 
-CREATE TRIGGER constanst_dates_update
+CREATE TRIGGER Shift_before_update
 BEFORE UPDATE ON Shift
 FOR EACH ROW 
 BEGIN 
     DECLARE event_date DATE;
+    DECLARE has_assignments INT DEFAULT(0);
 
     SELECT EventDate INTO event_date
     FROM Event
     WHERE EventID = NEW.EventID;
 
-    IF DATE(NEW.StartDateTime) <> event_date AND 
-    DATE(NEW.EndDateTime <> event_date) THEN
-        SIGNAL SQLSTATE '45500'
-        SET MESSAGE_TEXT = "Insert shift's date,
-        does match event's date ";
+    SELECT COUNT(*) INTO has_assignments
+    FROM VolunteerShift
+    WHERE ShiftID = OLD.ShiftID;
+
+    IF ((NEW.StartDateTime <> OLD.StartDateTime) 
+        OR (NEW.EndDateTime <> OLD.EndDateTime)
+        OR (NEW.EventID <> OLD.EventID))
+    AND (DATE(NEW.StartDateTime) <> event_date  
+        OR DATE(NEW.EndDateTime) <> event_date) THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = "Shift must start and end on its event date";
     END IF;
+
+    IF (has_assignments > 0) 
+       AND (NOT (NEW.StartDateTime <=> OLD.StartDateTime)
+         OR NOT (NEW.EndDateTime   <=> OLD.EndDateTime)
+         OR NOT (NEW.Capacity      <=> OLD.Capacity)
+         OR NOT (NEW.EventID       <=> OLD.EventID)) THEN 
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = "Shift times, capacity, and event cannot change once volunteers are assigned";
+    END IF;
+
 END $$
 
 DELIMITER ;
 
 
+
+-- ===== volunteer_DB/03_triggers/03_volunteershift_triggers.sql =====
+DELIMITER $$
+
+CREATE TRIGGER volunteershift_before_insert
+BEFORE INSERT ON VolunteerShift
+FOR EACH ROW 
+BEGIN 
+
+    DECLARE is_verf BOOLEAN;
+    DECLARE cap INT;
+    DECLARE startTime DATETIME;
+    DECLARE endTime DATETIME;
+    DECLARE currentassignments INT DEFAULT 0;
+    DECLARE overlapping INT DEFAULT 0;
+
+    IF NEW.Status <> 'Scheduled' THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'New assignments must have status Scheduled';
+    END IF;
+
+    SELECT BackgroundCheck INTO is_verf
+    FROM Volunteer
+    WHERE VolunteerID = NEW.VolunteerID;
+
+     IF (is_verf IS NOT TRUE) THEN
+        SIGNAL SQLSTATE '45500'
+        SET MESSAGE_TEXT = "Volunteer's background check is false";
+    END IF;
+
+    SELECT Capacity,StartDateTime,EndDateTime 
+    INTO cap,startTime,endTime
+    FROM Shift
+    WHERE ShiftID = NEW.ShiftID
+    FOR UPDATE;
+
+    SELECT COUNT(*) INTO currentassignments
+    FROM VolunteerShift
+    WHERE ShiftID = NEW.ShiftID
+    AND Stauts <> 'Cancelled'
+    FOR UPDATE;
+
+    IF currentassignments >= cap THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Shift is at capacity';
+    END IF;
+
+    SELECT COUNT(*) INTO overlapping
+    FROM Shift s 
+    INNER JOIN VolunteerShift vs ON vs.ShiftID = s.ShiftID
+    WHERE s.VolunteerID = NEW.VolunteerID
+        AND vs.status <> 'Cancelled'
+        AND s.StartDateTime < endTime
+        AND s.EndDateTime > startTime;
+
+    IF (overlapping > 0) THEN 
+        SIGNAL SQLSTATE '45500'
+        SET MESSAGE_TEXT = "Shift overlaps with another shift.";
+    END IF;
+
+END $$
+
+CREATE TRIGGER volunteershift_before_update
+BEFORE UPDATE ON VolunteerShift 
+FOR EACH ROW
+BEGIN
+
+    DECLARE is_verf BOOLEAN;
+    DECLARE cap INT;
+    DECLARE startTime DATETIME;
+    DECLARE endTime DATETIME;
+    DECLARE eventDate DATE;
+    DECLARE currentassignments INT DEFAULT 0;
+    DECLARE overlapping INT DEFAULT 0;
+    DECLARE derived VARCHAR(12);
+
+    IF (OLD.ApprovedAt IS NOT NULL) THEN 
+        SIGNAL SQLSTATE '45500'
+        SET MESSAGE_TEXT = "Can't change volunteershift after hours are approved.";
+    END IF;
+
+    IF (OLD.VolunteerID <> NEW.VolunteerID OR OLD.ShiftID <> NEW.ShiftID) THEN
+        SIGNAL SQLSTATE '45500'
+        SET MESSAGE_TEXT = "Can't change volunteer/shift fields after insertion.";
+    END IF;
+
+    SET derived = NULL;
+
+    IF NEW.CheckOutTime IS NOT NULL AND OLD.CheckOutTime IS NULL THEN
+        IF NEW.CheckInTime IS NULL THEN
+            SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'Check-out requires a check-in time';
+        END IF;
+        SET derived = 'Completed';
+    ELSEIF NEW.CheckInTime IS NOT NULL AND OLD.CheckInTime IS NULL THEN
+        SET derived = 'In-Progress';
+    END IF;
+
+    IF derived IS NOT NULL THEN
+        IF NEW.Status <> OLD.Status AND NEW.Status <> derived THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Requested status contradicts the recorded times';
+        END IF;
+        SET NEW.Status = derived;
+    END IF;
+
+
+    IF NEW.Status <> OLD.Status
+       AND NOT (  (OLD.Status = 'Scheduled'   AND NEW.Status IN ('In-Progress', 'No-Show', 'Cancelled','Completed'))
+                OR (OLD.Status = 'In-Progress' AND NEW.Status = 'Completed')
+                OR (OLD.Status = 'Cancelled'   AND NEW.Status = 'Scheduled')) THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Invalid status change';
+    END IF;
+
+    SELECT s.StartDateTime, s.EndDateTime, e.EventDate
+    INTO startTime, endTime, EventDate
+    FROM Shift s
+    INNER JOIN Event e ON e.EventID = s.EventID
+    WHERE s.ShiftID = NEW.ShiftID;
+    
+    IF NEW.CheckInTime IS NOT NULL AND NOT (NEW.CheckInTime <=> OLD.CheckInTime)
+       AND (NEW.CheckInTime < startTime OR NEW.CheckInTime >= endTime) THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Check-in must be within the shift';
+    END IF;
+
+    IF NEW.CheckOutTime IS NOT NULL AND NOT (NEW.CheckOutTime <=> OLD.CheckOutTime)
+       AND DATE(NEW.CheckOutTime) <> eventDate THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Check-out must be on the event date';
+    END IF;
+
+    IF OLD.Status = 'Cancelled' AND NEW.Status = 'Scheduled' THEN
+        SELECT BackgroundCheck INTO is_verf
+        FROM Volunteer
+        WHERE VolunteerID = NEW.VolunteerID;
+
+        IF (is_verf IS NOT TRUE) THEN
+            SIGNAL SQLSTATE '45500'
+            SET MESSAGE_TEXT = "Volunteer's background check is false";
+        END IF;
+
+        SELECT Capacity,StartDateTime,EndDateTime 
+            INTO cap,startTime,endTime
+        FROM Shift
+        WHERE ShiftID = NEW.ShiftID
+        FOR UPDATE;
+
+        SELECT COUNT(*) INTO currentassignments
+        FROM VolunteerShift
+        WHERE ShiftID = NEW.ShiftID
+        AND Status <> 'Cancelled'
+        FOR UPDATE;
+
+        IF currentassignments >= cap THEN
+            SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'Shift is at capacity';
+        END IF;
+
+        SELECT COUNT(*) INTO overlapping
+        FROM Shift s 
+        INNER JOIN VolunteerShift vs ON vs.ShifID = s.ShiftID
+        WHERE vs.VolunteerID = NEW.VolunteerID
+            AND vs.status <> 'Cancelled'
+            AND s.StartDateTime < endTime
+            AND s.EndDateTime > startTime;
+
+        IF (overlapping > 0) THEN 
+            SIGNAL SQLSTATE '45500'
+            SET MESSAGE_TEXT = "Shift overlaps with another shift.";
+        END IF;
+    END IF;
+END  $$
+
+
+CREATE TRIGGER volunteershift_before_delete
+BEFORE DELETE ON VolunteerShift
+FOR EACH ROW
+BEGIN
+    SIGNAL SQLSTATE '45000' 
+    SET MESSAGE_TEXT = 'Deletion from the voluneershift is strictly prohibited.';
+END  $$
+
+DELIMITER ;
+
+
+-- ===== volunteer_DB/03_triggers/04_volunteerhours_triggers.sql =====
+DELIMITER $$
+
+CREATE TRIGGER prevent_volunteerhours_update
+BEFORE UPDATE ON VolunteerHours
+FOR EACH ROW
+BEGIN
+    SIGNAL SQLSTATE '45000' 
+    SET MESSAGE_TEXT = 'Directly updating volunteerhours is strictly prohibited.';
+END  $$
+
+CREATE TRIGGER prevent_volunteerhours_delete
+BEFORE DELETE ON VolunteerHours
+FOR EACH ROW
+BEGIN
+    SIGNAL SQLSTATE '45000' 
+    SET MESSAGE_TEXT = 'Deletion from the volunteerhours is strictly prohibited.';
+END  $$
+
+
+DELIMITER ;
+
+
+-- ===== volunteer_DB/03_triggers/05_auditlog_triggers.sql =====
+DELIMITER $$
+
+CREATE TRIGGER prevent_auditlog_delete
+BEFORE DELETE ON AuditLog
+FOR EACH ROW
+BEGIN
+    SIGNAL SQLSTATE '45000' 
+    SET MESSAGE_TEXT = 'Deletion from the audit log is strictly prohibited.';
+END  $$
+
+CREATE TRIGGER prevent_auditlog_update
+BEFORE UPDATE ON AuditLog
+FOR EACH ROW
+BEGIN
+    SIGNAL SQLSTATE '45000' 
+    SET MESSAGE_TEXT = 'Updating the audit log is strictly prohibited.';
+END  $$
+
+CREATE TRIGGER event_after_insert_audit
+AFTER INSERT ON Event
+FOR EACH ROW
+BEGIN
+    DECLARE staffID INT DEFAULT NULL;
+
+    SELECT StaffID INTO staffID
+    FROM StaffMember
+    WHERE DbUsername COLLATE utf8mb4_bin = SUBSTRING_INDEX(USER(), '@', 1);
+
+    INSERT INTO AuditLog (TableName, Operation, RecordId, ChangedBy, ChangedByStaffID, ChangedAt, NewValues)
+    VALUES (
+        'Event',
+        'INSERT',
+        CONCAT('EventID=', NEW.EventID),
+        USER(),
+        staffID,
+        UTC_TIMESTAMP(6),
+        JSON_OBJECT(
+            'EventName',  NEW.EventName,
+            'EventDate', NEW.EventDate,
+            'CoordinatorID', NEW.CoordinatorID
+        )
+    );
+END $$
+
+CREATE TRIGGER event_after_update_audit
+AFTER UPDATE ON Event
+FOR EACH ROW
+BEGIN
+    DECLARE staffID INT DEFAULT NULL;
+
+    SELECT StaffID INTO staffID
+    FROM StaffMember
+    WHERE DbUsername COLLATE utf8mb4_bin = SUBSTRING_INDEX(USER(), '@', 1);
+
+    INSERT INTO AuditLog (TableName, Operation, RecordId, ChangedBy, ChangedByStaffID, ChangedAt, OldValues, NewValues)
+    VALUES (
+        'Event',
+        'UPDATE',
+        CONCAT('EventID=', NEW.EventID),
+        USER(),
+        staffID,
+        UTC_TIMESTAMP(6),
+        JSON_OBJECT('EventName', OLD.EventName, 'EventDate', OLD.EventDate, 'CoordinatorID', OLD.CoordinatorID),
+        JSON_OBJECT('EventName', NEW.EventName, 'EventDate', NEW.EventDate, 'CoordinatorID', NEW.CoordinatorID)
+    );
+END $$
+
+
+CREATE TRIGGER volunteer_after_insert_audit
+AFTER INSERT ON Volunteer
+FOR EACH ROW
+BEGIN
+    DECLARE staffID INT DEFAULT NULL;
+
+    SELECT StaffID INTO staffID
+    FROM StaffMember
+    WHERE DbUsername COLLATE utf8mb4_bin = SUBSTRING_INDEX(USER(), '@', 1);
+
+    INSERT INTO AuditLog (TableName, Operation, RecordId, ChangedBy, ChangedByStaffID, ChangedAt, NewValues)
+    VALUES (
+        'Volunteer',
+        'INSERT',
+        CONCAT('VolunteerID=', NEW.VolunteerID),
+        USER(),
+        staffID,
+        UTC_TIMESTAMP(6),
+        JSON_OBJECT(
+            'VolunteerName',  NEW.VolunteerName,
+            'VolunteerPhoneNumber', NEW.VolunteerPhoneNumber,
+            'VolunteerEmail', NEW.VolunteerEmail,
+            'BackgroundCheck', NEW.BackgroundCheck
+        )
+    );
+END $$
+
+CREATE TRIGGER volunteer_after_update_audit
+AFTER UPDATE ON Volunteer
+FOR EACH ROW
+BEGIN
+    DECLARE staffID INT DEFAULT NULL;
+
+    SELECT StaffID INTO staffID
+    FROM StaffMember
+    WHERE DbUsername COLLATE utf8mb4_bin = SUBSTRING_INDEX(USER(), '@', 1);
+
+    INSERT INTO AuditLog (TableName, Operation, RecordId, ChangedBy, ChangedByStaffID, ChangedAt, OldValues, NewValues)
+    VALUES (
+        'Volunteer',
+        'UPDATE',
+        CONCAT('VolunteerID=', NEW.VolunteerID),
+        USER(),
+        staffID,
+        UTC_TIMESTAMP(6),
+        JSON_OBJECT('VolunteerName', OLD.VolunteerName, 'VolunteerPhoneNumber', OLD.VolunteerPhoneNumber, 'VolunteerEmail', OLD.VolunteerEmail, 'BackgroundCheck', OLD.BackgroundCheck),
+        JSON_OBJECT('VolunteerName', NEW.VolunteerName, 'VolunteerPhoneNumber', NEW.VolunteerPhoneNumber, 'VolunteerEmail', NEW.VolunteerEmail, 'BackgroundCheck', NEW.BackgroundCheck)
+    );
+END $$
+
+CREATE TRIGGER volunteersSift_after_insert_audit
+AFTER INSERT ON VolunteerShift
+FOR EACH ROW
+BEGIN
+    DECLARE staffID INT DEFAULT NULL;
+
+    SELECT StaffID INTO staffID
+    FROM StaffMember
+    WHERE DbUsername COLLATE utf8mb4_bin = SUBSTRING_INDEX(USER(), '@', 1);
+
+    INSERT INTO AuditLog (TableName, Operation, RecordId, ChangedBy, ChangedByStaffID, ChangedAt, NewValues)
+    VALUES (
+        'VolunteerShift',
+        'INSERT',
+        CONCAT('VolunteerID=', NEW.VolunteerID, ';ShiftID=', NEW.ShiftID),
+        USER(),
+        staffID,
+        UTC_TIMESTAMP(6),
+        JSON_OBJECT(
+            'Status',  NEW.Status,
+            'CheckInTime',  NEW.CheckInTime,
+            'CheckOutTime', NEW.CheckOutTime,
+            'ApprovedBy', NEW.ApprovedBy,
+            'ApprovedAt', NEW.ApprovedAt
+        )
+    );
+END $$
+
+CREATE TRIGGER volunteerShift_after_update_audit
+AFTER UPDATE ON VolunteerShift
+FOR EACH ROW
+BEGIN
+    DECLARE staffID INT DEFAULT NULL;
+
+    SELECT StaffID INTO staffID
+    FROM StaffMember
+    WHERE DbUsername COLLATE utf8mb4_bin = SUBSTRING_INDEX(USER(), '@', 1);
+
+    INSERT INTO AuditLog (TableName, Operation, RecordId, ChangedBy, ChangedByStaffID, ChangedAt, OldValues, NewValues)
+    VALUES (
+        'VolunteerShift',
+        'UPDATE',
+        CONCAT('VolunteerID=', NEW.VolunteerID, ';ShiftID=', NEW.ShiftID),
+        USER(),
+        staffID,
+        UTC_TIMESTAMP(6),
+        JSON_OBJECT('Status', OLD.Status, 'CheckInTime', OLD.CheckInTime, 'CheckOutTime', OLD.CheckOutTime,'ApprovedBy', OLD.ApprovedBy, 'ApprovedAt', OLD.ApprovedAt),
+        JSON_OBJECT('Status', NEW.Status, 'CheckInTime', NEW.CheckInTime, 'CheckOutTime', NEW.CheckOutTime,'ApprovedBy', NEW.ApprovedBy,'ApprovedAt', NEW.ApprovedAt)
+    );
+END $$
+
+CREATE TRIGGER volunteerHours_after_insert_audit
+AFTER INSERT ON VolunteerHours
+FOR EACH ROW
+BEGIN
+    DECLARE staffID INT DEFAULT NULL;
+
+    SELECT StaffID INTO staffID
+    FROM StaffMember
+    WHERE DbUsername COLLATE utf8mb4_bin = SUBSTRING_INDEX(USER(), '@', 1);
+
+    INSERT INTO AuditLog (TableName, Operation, RecordId, ChangedBy, ChangedByStaffID, ChangedAt, NewValues)
+    VALUES (
+        'VolunteerHours',
+        'INSERT',
+        CONCAT('VolunteerID=', NEW.VolunteerID, ';ShiftID=', NEW.ShiftID),
+        USER(),
+        staffID,
+        UTC_TIMESTAMP(6),
+        JSON_OBJECT(
+            'HoursWorked',  NEW.HoursWorked
+        )
+    );
+END $$
+
+DELIMITER ; 
+
+-- ===== volunteer_DB/07_security/roles.sql =====
+GRANT SELECT                 ON volunteer_db.StaffMember    TO 'volunteer_proc'@'localhost';
+GRANT SELECT, UPDATE         ON volunteer_db.Volunteer      TO 'volunteer_proc'@'localhost';
+GRANT SELECT, UPDATE         ON volunteer_db.Shift          TO 'volunteer_proc'@'localhost';
+GRANT SELECT, UPDATE         ON volunteer_db.Event          TO 'volunteer_proc'@'localhost';
+GRANT SELECT, INSERT, UPDATE ON volunteer_db.VolunteerShift TO 'volunteer_proc'@'localhost';
+GRANT SELECT, INSERT         ON volunteer_db.VolunteerHours TO 'volunteer_proc'@'localhost';
+
+CREATE ROLE IF NOT EXISTS 'manager_role', 'coordinator_role', 'staff_role';
+
+GRANT SELECT, INSERT, UPDATE ON volunteer_db.StaffMember    TO 'manager_role';
+GRANT SELECT, INSERT, UPDATE ON volunteer_db.Event          TO 'manager_role';
+GRANT SELECT ON volunteer_db.Shift          TO 'manager_role';
+GRANT SELECT ON volunteer_db.Volunteer      TO 'manager_role';
+GRANT SELECT ON volunteer_db.Skill          TO 'manager_role';
+GRANT SELECT ON volunteer_db.VolunteerSkill TO 'manager_role';
+GRANT SELECT ON volunteer_db.VolunteerShift TO 'manager_role';
+GRANT SELECT ON volunteer_db.VolunteerHours TO 'manager_role';
+GRANT SELECT ON volunteer_db.AuditLog       TO 'manager_role';
+
+GRANT SELECT ON volunteer_db.Event          TO 'coordinator_role';
+GRANT SELECT, INSERT, UPDATE ON volunteer_db.Shift          TO 'coordinator_role';
+GRANT SELECT, INSERT, UPDATE ON volunteer_db.Volunteer      TO 'coordinator_role';
+GRANT SELECT, INSERT, UPDATE ON volunteer_db.Skill          TO 'coordinator_role';
+GRANT SELECT, INSERT, UPDATE ON volunteer_db.VolunteerSkill TO 'coordinator_role';
+GRANT SELECT ON volunteer_db.VolunteerShift TO 'coordinator_role';
+GRANT SELECT ON volunteer_db.VolunteerHours TO 'coordinator_role';
+GRANT EXECUTE ON PROCEDURE volunteer_db.SaveAssignment TO 'coordinator_role';
+GRANT EXECUTE ON PROCEDURE volunteer_db.ApproveHours   TO 'coordinator_role';
+
+GRANT SELECT ON volunteer_db.Event          TO 'staff_role';
+GRANT SELECT ON volunteer_db.Shift          TO 'staff_role';
+GRANT SELECT ON volunteer_db.Volunteer      TO 'staff_role';
+GRANT SELECT ON volunteer_db.Skill          TO 'staff_role';
+GRANT SELECT ON volunteer_db.VolunteerSkill TO 'staff_role';
+GRANT SELECT ON volunteer_db.VolunteerShift TO 'staff_role';

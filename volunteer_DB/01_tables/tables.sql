@@ -39,7 +39,7 @@ CREATE TABLE Shift(
 CREATE TABLE Volunteer(
     VolunteerID INT AUTO_INCREMENT PRIMARY KEY,
     VolunteerName VARCHAR(100) NOT NULL,
-    VolunteerPhoneNumber INT NOT NULL,
+    VolunteerPhoneNumber VARCHAR(20) NOT NULL,
     VolunteerEmail VARCHAR(100) NOT NULL,
     BackgroundCheck BOOLEAN NOT NULL DEFAULT FALSE
 );
@@ -62,7 +62,7 @@ CREATE TABLE VolunteerShift(
         (Status IN ('Scheduled', 'In-Progress', 'Completed', 'No-Show', 'Cancelled')),
     
     CONSTRAINT chk_vshift_status_time CHECK (
-        (Status IN ('Scheduled','No-Show','Cancelled') AND CheckInTime IS NULL AND CheckInTime IS NULL)
+        (Status IN ('Scheduled','No-Show','Cancelled') AND CheckInTime IS NULL AND CheckOutTime IS NULL)
         OR (Status = 'In-Progress' AND CheckInTime IS NOT NULL AND CheckOutTime IS NULL)
         OR (Status = 'Completed' AND CheckInTime IS NOT NULL AND CheckOutTime IS NOT NULL)
     ),

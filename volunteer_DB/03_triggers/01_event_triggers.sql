@@ -6,15 +6,14 @@ FOR EACH ROW
 BEGIN
     DECLARE is_coord INT DEFAULT(0);
 
-    SELECT COUNT(*) = INTO is_coord
+    SELECT COUNT(*) INTO is_coord
     FROM StaffMember
     WHERE StaffID = NEW.CoordinatorID
         AND StaffRole = 'Event Coordinator';
 
     IF (is_coord = 0) THEN
-        SIGNAL SQLSTATE '45500'
-        SET MESSAGE_TEXT = "Assigned staff memeber is not a 
-        event coordinator";
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = "Assigned staff member is not a event coordinator";
     END IF;
 
 END $$
@@ -37,7 +36,7 @@ BEGIN
 
     IF (is_coord = 0) THEN
         SIGNAL SQLSTATE '45000'
-            SET MESSAGE_TEXT = 'BR-04: assigned staff member is not an Event Coordinator';
+            SET MESSAGE_TEXT = 'Assigned staff member is not an Event Coordinator';
     END IF;
 
     IF NOT (NEW.EventDate <=> OLD.EventDate) AND has_shift > 0 THEN
