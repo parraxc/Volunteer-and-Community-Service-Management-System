@@ -44,7 +44,7 @@ BEGIN
             SET MESSAGE_TEXT = 'Unknown assignment status';
     END IF;
 
-
+    SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
     START TRANSACTION;
 
     SELECT VolunteerID INTO volunteerID

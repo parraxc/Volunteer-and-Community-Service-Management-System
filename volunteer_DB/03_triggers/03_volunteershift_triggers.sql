@@ -32,21 +32,21 @@ BEGIN
     WHERE ShiftID = NEW.ShiftID
     FOR UPDATE;
 
+
     SELECT COUNT(*) INTO currentassignments
     FROM VolunteerShift
     WHERE ShiftID = NEW.ShiftID
-    AND Stauts <> 'Cancelled'
-    FOR UPDATE;
+    AND Status <> 'Cancelled';
 
-    IF currentassignments >= cap THEN
+    IF (currentassignments >= cap) THEN
         SIGNAL SQLSTATE '45000'
-            SET MESSAGE_TEXT = 'Shift is at capacity';
+        SET MESSAGE_TEXT = 'Shift is at capacity';
     END IF;
 
     SELECT COUNT(*) INTO overlapping
     FROM Shift s 
     INNER JOIN VolunteerShift vs ON vs.ShiftID = s.ShiftID
-    WHERE s.VolunteerID = NEW.VolunteerID
+    WHERE vs.VolunteerID = NEW.VolunteerID
         AND vs.status <> 'Cancelled'
         AND s.StartDateTime < endTime
         AND s.EndDateTime > startTime;
@@ -148,10 +148,9 @@ BEGIN
         SELECT COUNT(*) INTO currentassignments
         FROM VolunteerShift
         WHERE ShiftID = NEW.ShiftID
-        AND Status <> 'Cancelled'
-        FOR UPDATE;
+        AND Status <> 'Cancelled';
 
-        IF currentassignments >= cap THEN
+        IF (currentassignments >= cap) THEN
             SIGNAL SQLSTATE '45000'
                 SET MESSAGE_TEXT = 'Shift is at capacity';
         END IF;

@@ -29,7 +29,7 @@ BEGIN
         SET MESSAGE_TEXT = 'Caller is not a registered Event Coordinator';
     END IF;
 
-
+    SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
     START TRANSACTION;
 
     SELECT VolunteerID INTO volunteerLocked
