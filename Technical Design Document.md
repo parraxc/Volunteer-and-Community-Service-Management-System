@@ -6,12 +6,8 @@
 | Project title | Volunteer and Community Service Management System |
 | Prepared by | Christian Parra, Prabhas Penumatsa |
 | Course | CS 437: Database Systems Implementation |
-| Document version | 1.3 — MySQL 26.10.0 design baseline |
 | Date | October 22, 2026 |
-| Requirements baseline | Functional Requirements.md, version 1.1 |
-| Status | Complete design draft; implementation and test verification pending |
-
-This document specifies the intended database design. It does not certify that all described objects exist or that tests have passed. The repository currently contains an initial table script and a TDD outline. Section 14 identifies differences to reconcile before submission. The selected target is MySQL Community Server 26.10.0. This is a design choice, not a claim that the team has installed it. Runtime environment details and actual test results must be captured during verification. The public repository was rechecked at commit `94c7b1bc71fba8e0f16777c4a0308c995f1eb804`; it still contains the same initial SQL, with no newer implementation available on main.
+| Version | 1.4 |
 
 ## 2. Design Overview
 
@@ -25,19 +21,16 @@ Each event occurs on one calendar date and has one assigned Event Coordinator. A
 
 | Component | Design selection | Purpose / verification |
 |---|---|---|
-| DBMS | MySQL Community Server 26.10.0 (Innovation release) | Selected latest GA release as of October 22, 2026; supports the required database features; record `SELECT VERSION()` before testing |
+| DBMS | MySQL Community Server <version from SELECT VERSION()> | CHECK constraints require 8.0.16 or later; record SELECT VERSION() in the test evidence |
 | Storage engine | InnoDB for every table | Foreign-key enforcement, transactional changes, and row locking |
 | Character set | utf8mb4 | Store names and descriptions without limiting text to ASCII |
-| Client | Matching MySQL 26.10 command-line client; Workbench optional | Reference execution client for builds, reports, and separate user sessions; an IDE is optional and does not determine build correctness |
+| Client | MySQL command-line client and MySQL Workbench | One saved Workbench connection per test account; command line for scripted builds and clean-checkout verification |
 | Modeling | Mermaid for embedded relationship documentation; separate Chen diagram for final ER deliverable | Document relationships here and meet the assignment's conceptual ER notation separately |
 | Source control | Existing GitHub repository | Version SQL, documents, diagrams, and reproducible build instructions |
-| Operating environment | Portable local deployment; reference target Linux container with MySQL 26.10.0 | Host may be macOS, Windows, or Linux; container deployment is a selected reproducibility option, not an installed environment claim |
-| Time convention | UTC for connection, audit, and approval timestamps; one configured event-local timezone for attendance DATETIME values | Set EVENT_TIME_ZONE before loading event fixtures; do not infer it from a developer’s location. Attendance comparisons use local wall-clock values without automatic conversion |
+| Operating environment | Local installation on macOS | State the real environment; the build scripts are portable to Windows and Linux |
+| Operating environment | Local installation on macOS | State the real environment; the build scripts are portable to Windows and Linux |
 
-MySQL 26.10.0 is the latest GA release shown on the official download page on October 22, 2026, with release notes dated October 20, 2026. It is selected to satisfy the request for the most recent MySQL version. It is an Innovation release; ongoing upgrades would be part of any longer-lived deployment. The course project pins this version for reproducibility. An existing class server on another release must be verified separately rather than described as upgraded.
-
-MySQL is selected because the FDD already specifies it and the required integrity, security, and transaction demonstrations can be implemented in the database. A single server is sufficient for the course workload. No ORM, web framework, or separate application server is required.
-
+MySQL is used because the FRD specifies it, and the required integrity, security, and transaction demonstrations can be implemented in the database. A single server is sufficient for the course workload. No ORM, web framework, or application server is required.
 MySQL CHECK constraints are used for same-row validation; cross-table rules use procedures and triggers. Technical references are listed at the end of this document.
 
 ## 4. Architecture and Scope
@@ -219,7 +212,7 @@ Identifiers are key attributes. Total approved hours and remaining shift capacit
 
 ## 6. Relational Schema
 
-PK = primary key; FK = foreign key; UQ = unique key. All foreign keys use RESTRICT behavior for deletion and key updates. Identifier values are immutable.
+PK = primary key; FK = foreign key; UQ = unique key. All foreign keys use RESTRICT behavior for deletion and key updates. No operational role changes identifier values; keys referenced by other tables are protected by RESTRICT.
 
 ```text
 StaffMember(StaffID PK, StaffName, StaffRole, DbUsername UQ)
@@ -231,7 +224,7 @@ Volunteer(VolunteerID PK, VolunteerName, VolunteerPhoneNumber,
 VolunteerShift(VolunteerID PK/FK -> Volunteer.VolunteerID,
                ShiftID PK/FK -> Shift.ShiftID, Status,
                CheckInTime, CheckOutTime,
-               ApprovedBy FK -> StaffMember.StaffID, ApprovedAt)
+               ApprovedBy FK -> StaffMember.StaffID, HoursApproved, ApprovedBy, ApprovedAt)
 VolunteerHours(VolunteerID PK, ShiftID PK, HoursWorked,
                FK (VolunteerID, ShiftID)
                    -> VolunteerShift(VolunteerID, ShiftID))
@@ -258,7 +251,7 @@ Unless marked nullable, columns are NOT NULL. Integer surrogate primary keys use
 | StaffRole | VARCHAR(20) | Required | CHECK: Manager, Event Coordinator, or Staff Member |
 | DbUsername | VARCHAR(32) | Required | UQ; individual database username |
 
-Operational usernames are unique across allowed account hosts; anonymous accounts and shared staff accounts are excluded. Use a case-sensitive comparison for identity mapping, matching the account provisioning convention. MySQL roles and StaffRole must agree; provisioning and role changes update both under administrator control.
+Operational usernames are unique across allowed account hosts; anonymous accounts and shared staff accounts are excluded. Use a case-sensitive comparison for identity mapping, matching the account provisioning convention. MySQL roles and StaffRole must agree; provisioning and role changes update both under administrator control. DbUsername uses the utf8mb4_bin collation so identity matching is case-sensitive.
 
 ### 7.2 Event
 
@@ -288,7 +281,7 @@ Both timestamp dates must equal EventDate. Overnight shifts are rejected.
 |---|---|---|---|
 | VolunteerID | INT | Required; generated | PK |
 | VolunteerName | VARCHAR(100) | Required | Display/contact name |
-| VolunteerPhoneNumber | VARCHAR(25) | Required | Text preserves leading zeros, plus signs, and formatting |
+| VolunteerPhoneNumber | VARCHAR(20) | Required | Text preserves leading zeros, plus signs, and formatting |
 | VolunteerEmail | VARCHAR(100) | Required | Contact email; uniqueness is not required by the FDD |
 | BackgroundCheck | BOOLEAN | Required; FALSE | CHECK IN (0,1); current verified flag |
 
@@ -316,7 +309,19 @@ There is no separately stored HoursApproved flag: approval is derived from Appro
 | No-Show | NULL | NULL |
 | Cancelled | NULL | NULL |
 
-A same-row CHECK explicitly enforces this matrix. Check-in must be at or after the shift start. The FDD does not require checkout to be no later than the scheduled end; no such additional restriction is assumed. A proposed normal workflow is Scheduled → In-Progress → Completed, Scheduled → No-Show, Scheduled → Cancelled, and Cancelled → Scheduled. Preapproval attendance corrections must still satisfy the status/time matrix and cancellation restrictions; the FDD does not impose an additional complete state-transition graph.
+A same-row CHECK enforces this matrix. A new assignment must be Scheduled with no times (BR-34). Check-in must fall within the shift (not earlier than its start and before its end), and check-out must fall on the event's date (BR-17).
+
+A BEFORE UPDATE trigger derives the status from newly recorded times (BR-35): the first check-in sets In-Progress, and a check-out sets Completed, including when both times are recorded together on a Scheduled assignment. A requested status that contradicts the times is rejected. Other status changes follow this table (BR-20):
+
+| From | Allowed to |
+|---|---|
+| Scheduled | In-Progress, Completed (both times recorded together), No-Show, Cancelled |
+| In-Progress | Completed |
+| Completed | none (final) |
+| No-Show | none (final) |
+| Cancelled | Scheduled (re-runs the background-check, capacity, and overlap checks) |
+
+After approval, no column of the assignment can change (BR-24). Test T09 verifies that the status set by the trigger is the value the CHECK constraint evaluates.
 
 ### 7.6 VolunteerHours
 
@@ -326,7 +331,7 @@ A same-row CHECK explicitly enforces this matrix. Check-in must be at or after t
 | ShiftID | INT | Required | Composite PK; component of assignment FK |
 | HoursWorked | DECIMAL(8,2) | Required | CHECK > 0; approval-time calculated hours |
 
-The wider precision is a design adjustment from the starter SQL. Calculation: ROUND(TIMESTAMPDIFF(SECOND, CheckInTime, CheckOutTime) / 3600.0, 2). Because positive attendance shorter than the rounding threshold could become 0.00, ApproveHours rejects a rounded result <= 0 with a clear message. This is a proposed precision policy to reconcile with the FDD; it does not claim that every positive duration is representable to two decimals. No manual edits or duplicate approval records are permitted.
+Hours are calculated at approval as ROUND(TIMESTAMPDIFF(SECOND, CheckInTime, CheckOutTime) / 3600.0, 2). ApproveHours rejects a rounded result of zero or less. No manual edits or duplicate approval records are permitted (FRD BR-22, BR-36)
 
 ### 7.7 Skill
 
@@ -385,7 +390,7 @@ Stored HoursWorked is deliberate derivation, not a claim that derivation alone v
 
 ### 9.1 Enforcement matrix
 
-Object names below are proposed logical names, not verified repository objects. Triggers can combine related checks on the same timing/event.
+Object names below describe the implemented objects; trigger names follow the pattern Table_timing_event.
 
 | FDD rule | Design enforcement |
 |---|---|
@@ -397,55 +402,58 @@ Object names below are proposed logical names, not verified repository objects. 
 | BR-07 | Capacity and timestamp CHECK constraints |
 | BR-08 | Shift BEFORE INSERT/UPDATE trigger checks EventDate; event-date edits restricted as below |
 | BR-09, BR-10 | VolunteerShift composite PK and FKs |
-| BR-11 | Assignment write procedure checks verified background status; trigger also rejects invalid activation |
-| BR-12 | Serialized assignment procedure locks Shift, counts non-Cancelled assignments, and rejects capacity overflow |
-| BR-13 | Serialized assignment procedure locks Volunteer and checks overlapping non-Cancelled assignments; reactivation repeats checks |
+| BR-11 | BEFORE INSERT trigger on VolunteerShift; BEFORE UPDATE trigger when a Cancelled assignment returns to Scheduled |
+| BR-12 | BEFORE INSERT/UPDATE trigger locks the Shift row (SELECT ... FOR UPDATE), then counts non-Cancelled assignments with a plain read; SaveAssignment holds the Volunteer and Shift locks under READ COMMITTED (section 9.2) |
+| BR-13 | BEFORE INSERT/UPDATE trigger checks overlapping non-Cancelled assignments; SaveAssignment locks the Volunteer row so one person's requests are serialized |
 | BR-14 | Attendance fields exist only on VolunteerShift |
 | BR-15, BR-16 | Status domain and status/time CHECK constraints |
-| BR-17 | Assignment validation trigger compares CheckInTime with Shift.StartDateTime |
+| BR-17 | BEFORE UPDATE trigger compares attendance times with the shift window and event date |
 | BR-18 | CHECK: CheckOutTime IS NULL OR CheckInTime IS NULL OR CheckOutTime > CheckInTime; status matrix independently rejects incomplete Completed rows |
 | BR-19 | No operational DELETE grants; BEFORE DELETE trigger rejects assignment deletion |
 | BR-20 | BEFORE UPDATE trigger checks cancellation transitions; reactivation runs full eligibility/capacity/overlap validation |
-| BR-21, BR-22 | ApproveHours validates identity, ownership, and completion; updates approval and inserts hours in one transaction |
+| BR-21| ApproveHours validates identity, ownership, and completion; updates approval and inserts hours in one transaction |
+| BR-22 | ApproveHours calculates hours, rounds to two decimals, and rejects a rounded result of zero or less |
 | BR-23 | HoursWorked CHECK > 0 and procedure rounding validation |
-| BR-24 | BEFORE UPDATE trigger rejects changes to approved assignment keys, status, attendance, and approval metadata; hours have no operational write grants |
+| BR-24 | BEFORE UPDATE trigger rejects any change to an approved assignment |
 | BR-25 | VolunteerSkill composite PK and FKs |
 | BR-26 | StaffMember.DbUsername UNIQUE NOT NULL |
-| BR-27 | Role grants, column restrictions, controlled routines, and account/StaffRole alignment |
+| BR-27 | MySQL roles; EXECUTE on SaveAssignment and ApproveHours granted only to the Event Coordinator role; no INSERT/UPDATE/DELETE grants on VolunteerShift or VolunteerHours for operational roles; account/StaffRole alignment |
 | BR-28 | ApproveHours derives actor from connected user; no staff-ID argument |
 | BR-29 | AFTER INSERT/UPDATE triggers on Volunteer, VolunteerShift, VolunteerHours, and Event insert AuditLog records |
 | BR-30 | No operational AuditLog DML grants; BEFORE UPDATE/DELETE triggers reject mutation |
+| BR-31 | Event BEFORE UPDATE trigger rejects EventDate changes once the event has shifts |
+| BR-32 | Shift BEFORE UPDATE trigger rejects changes to event, start, end, and capacity once any assignment exists |
+| BR-33 | StaffMember BEFORE UPDATE trigger rejects a role change away from Event Coordinator while the person coordinates an event |
+| BR-34 | VolunteerShift BEFORE INSERT trigger requires status Scheduled and no times |
+| BR-35 | VolunteerShift BEFORE UPDATE trigger sets NEW. Status from newly recorded times and rejects a contradictory requested status |
+| BR-36 | BEFORE UPDATE and BEFORE DELETE triggers on VolunteerHours; no UPDATE or DELETE grants |
+| BR-37 | SaveAssignment: locks Volunteer, then Shift, then the assignment, under READ COMMITTED; no direct INSERT or UPDATE grants on VolunteerShift |
 
 ### 9.2 Concurrent scheduling
 
-A count followed by an insert without serialization is insufficient. Assignment writes use a transaction-owning procedure such as SaveAssignment. Staff roles receive EXECUTE for permitted assignment actions instead of unrestricted INSERT/UPDATE on VolunteerShift. This implements the FDD's logical add/update entitlement through a controlled interface; it changes the suggested physical enforcement, not the business permission.
+A count followed by an insert without serialization is insufficient. Assignment writes go through the SaveAssignment procedure, which owns the transaction. Staff roles receive EXECUTE for permitted assignment actions instead of INSERT/UPDATE on VolunteerShift. This implements the FRD's add/update entitlement through a controlled interface; it changes the physical enforcement, not the business permission.
 
-For a single assignment, the procedure locks the Volunteer row first and the Shift row second using SELECT ... FOR UPDATE. It then validates eligibility, capacity, overlap, cancellation transitions, and attendance before writing. Counts and overlap queries use current locking reads within that transaction, not an older consistent-read snapshot. All assignment mutation routes use this protocol, including cancellation, attendance changes, and approval where applicable. Keys cannot be changed to move an assignment; a different assignment must be created through the same procedure.
+SaveAssignment sets READ COMMITTED, then locks the Volunteer row, the Shift row, and the assignment row in that order using SELECT ... FOR UPDATE, then writes. The VolunteerShift triggers perform the eligibility, capacity, overlap, transition, and attendance validation. MySQL does not allow a trigger to take a locking read on the table that fired it (error 1442), so the trigger locks the Shift row, which is a different table, and counts assignments with a plain read. Under READ COMMITTED that read sees rows committed by a competing request that held the lock first.
 
-The Volunteer lock serializes competing schedules for the same person. The Shift lock serializes competing requests for the same capacity. Recheck conditions after waiting. The overlap predicate is new.StartDateTime < existing.EndDateTime AND new.EndDateTime > existing.StartDateTime. Cancelled rows and the assignment currently being updated are excluded. Back-to-back shifts are allowed. Use an indexed, supported locking query shape; validate the concrete SQL on the installed MySQL version.
+The Volunteer lock serializes competing schedules for the same person. The Shift lock serializes competing requests for the same capacity. The overlap predicate is new.StartDateTime < existing.EndDateTime AND new.EndDateTime > existing.StartDateTime. Cancelled rows are excluded, which also excludes the row being reactivated, since it is Cancelled until the update completes. Back-to-back shifts are allowed.
 
-Transactions are short. Deadlock or lock-timeout failures roll back and return a retryable error; clients retry the complete operation, not a partially completed statement. Two-session tests are required before describing concurrency protection as implemented.
+Transactions are short. Deadlock and lock-timeout errors roll back and return a retryable error; clients retry the whole operation. The procedures assume no transaction is already open (START TRANSACTION would commit it). Two-session tests (T17, T18) are required before describing the concurrency protection as verified.
 
 ### 9.3 Parent edits and historical consistency
 
-Proposed conservative policy: once a shift has any assignment, reject changes to its EventID and scheduled start/end; a capacity reduction below its non-Cancelled assignment count is also rejected. Once an event has shifts, reject EventDate changes. These policies avoid retroactively invalidating attendance, overlaps, and date rules. They restrict some otherwise broad update permissions and must be acknowledged in final FDD reconciliation.
+Parent edits are restricted by triggers (BR-31 to BR-33). Once an event has shifts, EventDate cannot change. Once a shift has any assignment, including a Cancelled one, its event, start, end, and capacity cannot change; a shift with no assignments can still be edited, subject to the event-date rule. A staff member cannot leave the Event Coordinator role while coordinating an event.
 
-Shift maintenance locks the Shift row before checking dependent assignments. Assignment writes hold that same row lock. Event-date validation locks the relevant Event row; event maintenance serializes against shift creation. Reassigning an event coordinator is allowed through Manager event maintenance, serializes with approval on the Event row, and does not rewrite past approvals.
-
-Changing a coordinator's staff role is rejected while they coordinate events. Administrative MySQL role changes and StaffRole edits must be coordinated. A background-check revocation prevents new/reactivated assignments; it does not erase historical attendance or approved hours. Volunteer maintenance serializes with assignment activation through the Volunteer row lock.
+An UPDATE takes an exclusive lock on the row it changes, so these edits serialize with SaveAssignment and ApproveHours, which lock the Shift and Event rows. Reassigning an event's coordinator is a Manager action; because ApproveHours locks the Event row, an approval and a reassignment cannot interleave, and past approvals are not rewritten. A background-check revocation blocks new or reactivated assignments; it does not remove historical attendance or approved hours.
 
 ## 10. Database Objects and SQL Design
 
 ### 10.1 Stored procedures
-
-| Proposed object | Interface and responsibility |
+| Object | Responsibility |
 |---|---|
-| SaveAssignment | Accepts assignment identifiers and permitted scheduling/attendance values; authenticates coordinator role; owns transaction; locks Volunteer then Shift; validates and writes assignment. Does not accept approval metadata. |
-| ApproveHours | Accepts VolunteerID and ShiftID only; owns transaction; authorizes assigned coordinator; creates approved hours atomically. |
-| Controlled maintenance routines | Implement any parent edits requiring coordinated locks, notably shift capacity/schedule, event date/coordinator, and staff role changes. Exact names may follow the final code. |
-| Report SQL / read routines | Execute the ten reports with filters; enforce audit visibility through database privileges. |
+| SaveAssignment | Parameters: VolunteerID, ShiftID, status, check-in time, check-out time (NULL leaves a value unchanged). Identifies an Event Coordinator from USER(); owns the transaction; locks Volunteer, Shift, then the assignment; inserts or updates. The VolunteerShift triggers validate. Does not accept approval metadata. Runs as the restricted definer volunteer_proc. |
+| ApproveHours | Parameters: VolunteerID, ShiftID only. Identifies the assigned Event Coordinator from USER(); owns the transaction; approves and creates the hours record atomically. Runs as volunteer_proc. |
 
-Procedures reject calls from an already active caller-managed transaction, or use a separately documented compatible contract. The selected course implementation uses transaction-owning procedures called with no transaction already open; it must not silently commit unrelated caller work. Installation DDL is separate from these operational transactions.
+Parent edits (shift, event, staff role) use ordinary UPDATE statements protected by the triggers in section 9.3, and no separate maintenance routines exist. Reports are plain SELECT queries in reports.sql; access is controlled by grants.
 
 ### 10.2 ApproveHours algorithm
 
@@ -460,27 +468,28 @@ Approval fields are not writable by coordinator grants or SaveAssignment. A narr
 
 ### 10.3 Trigger responsibilities
 
-Validation triggers enforce coordinator role, shift date, attendance/time checks, cancellation rules, approved-record immutability, and delete protection. Concurrency-sensitive checks are performed in controlled procedures before DML so they can lock/read assignment data without relying on unsupported same-table trigger operations.
+Validation triggers enforce coordinator role, shift date, attendance and time rules, status transitions, approved-record immutability, delete protection, and parent-edit restrictions. Eligibility, capacity, and overlap are checked in VolunteerShift triggers so that no write path can bypass them; SaveAssignment adds serialization (section 9.2).
 
-AFTER INSERT and AFTER UPDATE auditing triggers on the four specified tables insert AuditLog rows with connected actor, mapped staff identifier where available, source key, operation, UTC timestamp, and old/new JSON images. AuditLog itself has no auditing trigger that recursively audits its own inserts. Rejected or rolled-back writes leave no committed success audit entry. Capturing failed login/permission attempts would require separate server security logging and is outside this business audit mechanism.
+AFTER INSERT and AFTER UPDATE audit triggers cover Event, Volunteer, and VolunteerShift, and an AFTER INSERT trigger covers VolunteerHours, whose updates and deletes are always rejected. That makes seven audit triggers. Each inserts an AuditLog row with the connected actor, the mapped staff ID (NULL for a deployment account), source key, operation, UTC timestamp, and old/new JSON images. AuditLog has no audit trigger of its own. Rejected or rolled-back writes leave no audit entry. Failed login and permission attempts would need server security logging and are out of scope.
 
 The required “trigger making an update” demonstration is satisfied by a proposed BEFORE UPDATE attendance trigger that sets NEW.Status to In-Progress when check-in is first recorded and to Completed when checkout is recorded on an unapproved assignment. It must reject an explicitly contradictory requested status, then apply status/time checks. This mutates the incoming row using SET NEW.Status, rather than issuing a second UPDATE against the triggering table. The concrete implementation and instructor interpretation of this demonstration must be verified; audit-trigger INSERTs alone are not presented as an UPDATE demonstration.
 
 ### 10.4 Build and initial-data process
 
-The final repository must provide an entry script and documented commands that obtain the repository and build a fresh schema with fictional initial data. Target order: create database/session settings; create parent and child tables; indexes; routines and triggers; seed staff/events/volunteers/shifts/skills/assignments; provision operational accounts and roles; run smoke checks. Seed audited data only after audit triggers exist, retaining the deployment actor when no staff mapping exists.
+The final repository must provide an entry script and documented commands that obtain the repository and build a fresh schema with fictional initial data. Build order: setup (restricted definer account), tables, routines, triggers, roles and grants, seed data, account provisioning, then the approval seed scripts run as the coordinator accounts.” Replace “Internal seed routines may be executed by the deployment account” (in 10.5) with “Seed approvals are run by the coordinator test accounts, since ApproveHours accepts only a connected Event Coordinator.
 
 Privileged account provisioning is a separate, documented deployment step and uses local secrets. No password is committed. The build must stop on SQL errors; do not conceal errors with force/continue options. Document required working directory and paths. Keep reset/drop behavior explicit and limited to the project's test database. A fresh build is verified from a clean checkout, rather than assuming the existing developer database proves reproducibility.
 
 ### 10.5 Concrete deployment and build contract
 
-The reference database is `volunteer_db`. Use InnoDB, utf8mb4 with a documented collation, strict SQL mode (including STRICT_TRANS_TABLES), session timezone `+00:00`, and READ COMMITTED for the controlled write interfaces. The session setting is applied to every operational connection; do not depend on a GUI connection's defaults. Locking reads, rather than isolation level alone, implement serialization. Event-local DATETIME values are supplied explicitly and are never interpreted as audit UTC values.
+he reference database is volunteer_db. Use InnoDB and utf8mb4 with strict SQL mode. SaveAssignment sets READ COMMITTED for its own transaction, so no connection-level setting is required. Shift and attendance times are event-local values supplied explicitly; approval and audit times use UTC_TIMESTAMP(6)
 
 Recommended repository layout:
 
 ```text
 build.sql
 volunteer_DB/
+  00_setup/accounts.sql
   01_tables/tables.sql
   02_routines/routines.sql
   03_triggers/triggers.sql
@@ -489,11 +498,12 @@ volunteer_DB/
   06_tests/acceptance.sql
   07_security/roles.sql
 scripts/
-  build.sh
   provision_accounts.sql.example
+  seed_approvals_coord1.sql
+  seed_approvals_coord2.sql
 ```
 
-This is a proposed layout, not the current repository tree. Names can change, but build.sql must reference existing paths with exact case. The current file refers to `volunteer_db/01_tables/01_volunteers.sql`, which is absent; the tracked table file is `volunteer_DB/1. Tables/tables.sql`. Fix that mismatch before claiming the build works. Prefer paths without spaces and document the repository-root working directory. A reset that drops the database must be a separately named, explicit test-only operation; the ordinary build should fail if it would overwrite an existing populated schema.
+build.sql drops and recreates volunteer_db and is intended for the project’s test database only; it must not be pointed at any other database. It must be run from the repository root.
 
 Reference fresh-checkout invocation (requires the completed build files and configured MySQL login path):
 
@@ -553,7 +563,7 @@ Suggested nonbinding test scales are hundreds of fictional volunteers for correc
 
 ## 11. Query and Report Design
 
-Report IDs follow the FDD's Reports and Queries table, whose RQ-04–RQ-09 acceptance labels currently differ. This is the canonical mapping for this document.
+Report IDs follow the FRD’s Reports and Queries table.
 
 | ID / report | Inputs and SQL design | Result / edge case |
 |---|---|---|
@@ -586,12 +596,13 @@ V = view; A/U = authorized add/update, which may be exposed through controlled p
 | Event | V, A, U | V | V |
 | Shift | V | V, A, U | V |
 | Volunteer, Skill, VolunteerSkill | V | V, A, U | V |
-| VolunteerShift | V | V, A, U through controlled assignment interface | V |
+| VolunteerShift | V | V; changes only through SaveAssignment | V |
+| SaveAssignment | None | X | None |
 | VolunteerHours | V | V; no direct writes | None |
 | ApproveHours | None | X, own events only | None |
 | AuditLog | V | None | None |
 
-Approval metadata is excluded from user-writable columns. Where procedures are used, grant the corresponding logical action only through EXECUTE. Any definer routine uses a dedicated restricted owner, validates caller business role, exposes no arbitrary SQL, and is not owned by a root account for convenience. Report views/routines must not expose a source table forbidden by this matrix. In particular, Staff Member reports cannot disclose VolunteerHours through definer access.
+Approval metadata is excluded from user-writable columns. Event Coordinators have no INSERT or UPDATE grant on VolunteerShift or VolunteerHours; assignment changes go through EXECUTE on SaveAssignment and approval through EXECUTE on ApproveHours. Both run as the restricted definer volunteer_proc, which holds only the privileges those routines need. Report queries must not expose a source table forbidden by this matrix
 
 The database schema owner remains technically capable of altering controls; audit immutability is an operational-role guarantee, not protection against a malicious database administrator.
 
@@ -623,9 +634,9 @@ The following are planned tests. No pass status is implied. Each test must leave
 | T04 | Assign unverified volunteer, then verify and retry | First rejected; second accepted |
 | T05 | Assign 12:00–15:00 then 14:00–17:00; retry with 15:00–17:00 | Overlap rejected; back-to-back accepted |
 | T06 | Fill shift, attempt another assignment, cancel one, retry | Full shift rejected; cancellation releases capacity |
-| T07 | Inconsistent status/times, early check-in, reversed checkout | Invalid attendance rejected; valid sequence accepted |
+| T07 | Inconsistent status/times, check-in before shift start or after shift end, check-out on another day, reversed checkout | Invalid attendance rejected; valid sequence accepted |
 | T08 | Scheduled → Cancelled → Scheduled; Completed → Cancelled; reactivate on full/overlapping shift | Valid transitions succeed; invalid transitions/reactivation rejected |
-| T09 | Add checkout to eligible checked-in assignment | BEFORE UPDATE trigger sets NEW.Status = Completed; matching audit entry committed |
+| T09 | Record only a check-in; then only a check-out; record both on a Scheduled row; request a contradictory status | Status becomes In-Progress, then Completed; both-at-once gives Completed; contradiction rejected; audit entries committed |
 | T10 | Assigned coordinator approves completed 12:00–15:00 assignment | One 3.00-hour row and matching approver/timestamp; both audit changes captured |
 | T11 | Wrong coordinator, incomplete assignment, duplicate approval, or very short rounded-zero duration | Clear exception; no partial approval or hours row |
 | T12 | Attempt direct approval-field writes, direct VolunteerHours insert/update, and postapproval attendance edits | Operational accounts denied or validation rejects; original approval unchanged |
@@ -640,6 +651,7 @@ The following are planned tests. No pass status is implied. Each test must leave
 | T21 | Reject assignment DELETE; reject invalid parent edits and coordinator-role change | Records and dependencies remain valid |
 | T22 | Measure representative queries with EXPLAIN and larger fictional data | Record plans and elapsed times; justify indexes from evidence |
 | T23 | Volunteer with multiple skills and volunteer with two approved shifts at same event | Skill search accurate; event counts person once and sums both shifts |
+| T24 | Create an assignment with a status other than Scheduled, or with attendance times | Rejected (BR-34) |
 
 For T16, issue KILL CONNECTION against the exact test session ID using a deployment account with appropriate authority. Do not use KILL QUERY alone as proof that the whole transaction was rolled back. Verification waits for rollback to finish. The operational roles do not receive session-management privileges.
 
@@ -671,52 +683,15 @@ For T16, issue KILL CONNECTION against the exact test session ID using a deploym
 | FR-07 | Skill, VolunteerSkill, RQ-07 | T23 |
 | FR-08 | VolunteerShift composite PK | T03 |
 | FR-09 | Background activation check | T04 |
-| FR-10 | Serialized overlap checks | T05, T08, T17 |
-| FR-11 | Serialized capacity checks | T06, T08, T17 |
+| FR-10 | Overlap triggers plus SaveAssignment serialization. | T05, T08, T17 |
+| FR-11 | Capacity triggers plus SaveAssignment serialization. | T06, T08, T17 |
 | FR-12 | ApproveHours completion validation | T10, T11 |
 | FR-13 | Atomic hours insert and approval | T10, T11, T18 |
 | FR-14 | Connected coordinator and Event ownership | T11, T18 |
 | FR-15 | Role grants and controlled interfaces | T12, T13 |
 | FR-16 | Four-table audit triggers and protected AuditLog | T14–T16 |
+| FR-17 | VolunteerShift BEFORE UPDATE trigger sets status from times | T09 |
+| FR-18 | SaveAssignment locks; Shift lock in triggers; READ COMMITTED | T17, T18 |
+| FR-19 | Event, Shift, and StaffMember BEFORE UPDATE triggers | T21 |
 
-All BR-01–BR-30 are mapped in section 9.1. Every RQ-01–RQ-10 is specified in section 11 and verified under T19 with additional RQ-07/RQ-06 fixtures in T23. Performance, architecture, and security requirements are addressed in sections 4, 10.6, and 12.
-
-### 14.2 Reconciliation before submission
-
-| Item | Required action / current status |
-|---|---|
-| Installed environment | Target fixed to MySQL 26.10.0 and matching CLI; Linux container is the reference deployment; capture actual runtime output with section 10.5 queries |
-| Starter SQL syntax | Correct AUTO_INCREMNET, mismatched Event_Coordinator/CoordinatorID and VolunterID names, trailing/missing commas, repeated CheckInTime in status check, and malformed OR expressions |
-| Schema differences | Use required CoordinatorID; text phone; composite assignment FK for hours; remove HoursApproved; standardize AuditID; add staff audit mapping; choose documented precision/rounding |
-| Controlled write interfaces | Implement assignment/approval and parent-maintenance locks; reconcile logical A/U entitlements with procedure EXECUTE grants |
-| Proposed policy additions | Record acceptance of parent schedule/date restrictions and short-duration rounding policy; adjust FDD wording if retained |
-| Report IDs | Align FDD acceptance labels: RQ-04 pending, RQ-05 volunteer summary, RQ-06 event hours, RQ-07 skills, RQ-08 background, RQ-09 attendance |
-| Final conceptual ER deliverable | Produce full Chen diagram with requested notation; relationship sketch here is not the separate completed diagram |
-| Runtime objects and results | Compare actual routine/trigger/index names to this design; fill test results only after execution |
-| Build and evidence | Fix absent SOURCE path and case mismatch in current build.sql; implement the section 10.5 build contract, verify initial data, capture demos, and compare against final commit |
-
-### 14.3 Current implementation versus designed objects
-
-| Object area | Public main at 94c7b1b | Intended completion |
-|---|---|---|
-| Nine CREATE TABLE definitions | Present in initial table script; syntax/reference defects remain | Correct and reconcile to section 7 |
-| Foreign keys and CHECKs | Partial definitions present; not executed here | Complete checks and assignment-level hours FK |
-| Approval / scheduling procedures | No routine files present | Implement section 10 interfaces and handlers |
-| Audit / validation triggers | No trigger files present | Implement section 9/10 controls |
-| Roles / users | No security scripts present | Implement section 12 permissions and deployment provisioning |
-| Sample data / reports / tests | No corresponding files present | Add fictional fixtures, ten reports, and test evidence |
-| Build entry point | Present; drops schema and references an absent path | Make clean build reproducible and reset explicit |
-| TDD | Public file is still an outline | This local version supplies completed design content |
-
-
-### 14.4 Sources
-
-- [Project FDD](https://github.com/parraxc/Volunteer-and-Community-Service-Management-System/blob/main/Functional%20Requirements.md), version 1.1, reviewed October 22, 2026.
-- [Existing TDD outline](https://github.com/parraxc/Volunteer-and-Community-Service-Management-System/blob/main/Technical%20Design%20Document.md) and [initial SQL](https://github.com/parraxc/Volunteer-and-Community-Service-Management-System/blob/main/volunteer_DB/1.%20Tables/tables.sql), reviewed October 22, 2026.
-- Instructor's supplied `database_group_project_requirements.pdf`: deliverables; architecture/security/performance; ER notation; 3NF; entitlements; demonstrations.
-- [MySQL CHECK constraints](https://dev.mysql.com/doc/refman/26.10/en/create-table-check-constraints.html): same-row validation restrictions.
-- [MySQL InnoDB locking reads](https://dev.mysql.com/doc/refman/26.10/en/innodb-locking-reads.html): transactional locking for competing operations.
-- [MySQL stored object access control](https://dev.mysql.com/doc/refman/26.10/en/stored-objects-security.html): invoker/definer privilege context.
-- [MySQL Community Server downloads](https://dev.mysql.com/downloads/mysql/): latest GA download verified as 26.10.0 on October 22, 2026.
-- [MySQL 26.10 release notes](https://dev.mysql.com/doc/relnotes/mysql/26.10/en/): release dated October 20, 2026.
-- [Repository source baseline](https://github.com/parraxc/Volunteer-and-Community-Service-Management-System/tree/94c7b1bc71fba8e0f16777c4a0308c995f1eb804): immutable source snapshot used for implementation-status comparison.
+All BR-01–BR-37 are mapped in section 9.1. Every RQ-01–RQ-10 is specified in section 11 and verified under T19 with additional RQ-07/RQ-06 fixtures in T23. Performance, architecture, and security requirements are addressed in sections 4, 10.6, and 12.
