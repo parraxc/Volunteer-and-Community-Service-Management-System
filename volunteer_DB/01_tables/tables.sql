@@ -18,7 +18,7 @@ CREATE TABLE Event (
     EventID INT AUTO_INCREMENT PRIMARY KEY,
     EventName VARCHAR(150) NOT NULL,
     EventDate DATE NOT NULL, 
-    CoordinatorID INT,
+    CoordinatorID INT NOT NULL,
     FOREIGN KEY (CoordinatorID) REFERENCES StaffMember (StaffID)
 );
 
