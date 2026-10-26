@@ -1,4 +1,4 @@
-# ER diagrams — FRD v1.4 / current SQL
+# ER diagrams — FRD v1.5 / current SQL
 
 - **conceptual-chen.svg**: conceptual ER diagram using relationship diamonds, underlined keys, double lines for total participation, weak entity and identifying relationship, derived attributes, and a conceptual multivalued skills collection.
 - **relational-schema.svg**: readable physical schema with all nine tables, every actual attribute/type, key flags, nullability, and relationship cardinalities.
