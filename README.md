@@ -18,7 +18,6 @@ mysql --login-path=volunteer-admin < build_all.sql
 - [Ten SQL reports and usage examples](volunteer_DB/05_reports/README.md)
 - [Acceptance tests and execution instructions](volunteer_DB/06_tests/README.md)
 - [ER diagrams and notation](docs/er/README.md)
-- [Implementation fixes and verification limits](docs/COMPLETION-NOTES.md)
 
 For report demonstrations, provision individual operational accounts and map them to StaffMember.DbUsername as in the existing sample provisioning script, using local credentials. The automated acceptance runner creates and removes its own random test accounts, so manual sample accounts are not required to run it. Fixture rows remain until a deliberate rebuild.
 
