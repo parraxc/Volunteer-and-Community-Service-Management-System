@@ -5,7 +5,7 @@
 | Project title | Volunteer and Community Service Management System|
 | Prepared by | Christian Parra, Prabhas Penumatsa|
 | Course | CS 437: Database Systems Implementation |
-| Version| 1.4 |
+| Version| 1.5|
 
 ## Business Problem and Project Purpose 
 Nonprofit organizations need a centralized system for managing their volunteers and community service opportunities. Many organizations rely on tracking volunteers by simple spreadsheet tracking or on paper. Not only does this lead to inaccurate information, but it also makes reporting a volunteer's hours difficult and tedious. 

@@ -2,5 +2,4 @@
 .vscode/*
 #build script result fron make_build_all.sh
 build_all.sql/*
-#the local account 
-scripts/provision_accounts.sql/*
+

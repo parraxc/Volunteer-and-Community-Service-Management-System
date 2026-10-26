@@ -7,7 +7,7 @@
 | Prepared by | Christian Parra, Prabhas Penumatsa |
 | Course | CS 437: Database Systems Implementation |
 | Date | October 22, 2026 |
-| Version | 1.4 |
+| Version | 1.5 |
 
 ## 2. Design Overview
 
