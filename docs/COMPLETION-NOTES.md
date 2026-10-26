@@ -28,6 +28,3 @@ These changes are included as reviewable source changes, not claims of successfu
 - Generated build checked for deterministic regeneration and exclusion of test/report SQL.
 - MySQL 26.10.0 and 8.4.13 both failed initialization in this restricted environment (system-information permission denied; crash before schema creation). This is not recorded as a successful database build or test run.
 
-## Remaining team work
-
-Run the deliberate disposable-database build, then the automated suite and presentation demonstrations using the README. Record the actual MySQL version and results. Review the small prerequisite fixes with your teammate; commit the completed deliverables using your own account when ready.
