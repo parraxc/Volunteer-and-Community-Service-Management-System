@@ -3,16 +3,16 @@ DELIMITER $$
 CREATE DEFINER = 'volunteer_proc'@'localhost' PROCEDURE SaveAssignment (
     IN p_VolunteerID  INT,
     IN p_ShiftID      INT,
-    IN p_Status       VARCHAR(12),   
-    IN p_CheckInTime  DATETIME,      
-    IN p_CheckOutTime DATETIME       
+    IN p_Status       VARCHAR(12),
+    IN p_CheckInTime  DATETIME,
+    IN p_CheckOutTime DATETIME
 )
 SQL SECURITY DEFINER
 BEGIN
-    DECLARE staffID INT;
-    DECLARE staffRole     VARCHAR(20);
-    DECLARE volunteerID     INT;
-    DECLARE shiftID    INT;
+    DECLARE v_staff_id INT;
+    DECLARE v_staff_role VARCHAR(20);
+    DECLARE v_volunteer_id INT;
+    DECLARE v_shift_id INT;
     DECLARE existing INT;
     DECLARE actiontaken   VARCHAR(10);
 
@@ -29,11 +29,11 @@ BEGIN
         RESIGNAL;
     END;
 
-    SELECT StaffID, StaffRole INTO staffId, staffRole
+    SELECT StaffID, StaffRole INTO v_staff_id, v_staff_role
     FROM StaffMember
     WHERE DbUsername COLLATE utf8mb4_bin = SUBSTRING_INDEX(USER(), '@', 1);
 
-    IF staffID IS NULL OR staffRole <> 'Event Coordinator' THEN
+    IF v_staff_id IS NULL OR v_staff_role <> 'Event Coordinator' THEN
         SIGNAL SQLSTATE '45000'
             SET MESSAGE_TEXT = 'Caller is not a registered Event Coordinator';
     END IF;
@@ -47,21 +47,21 @@ BEGIN
     SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
     START TRANSACTION;
 
-    SELECT VolunteerID INTO volunteerID
+    SELECT VolunteerID INTO v_volunteer_id
     FROM Volunteer
     WHERE VolunteerID = p_VolunteerID
     FOR UPDATE;
 
-    IF volunteerID IS NULL THEN
+    IF v_volunteer_id IS NULL THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Volunteer not found';
     END IF;
 
-    SELECT ShiftID INTO shiftID
+    SELECT ShiftID INTO v_shift_id
     FROM Shift
     WHERE ShiftID = p_ShiftID
     FOR UPDATE;
 
-    IF shiftID IS NULL THEN
+    IF v_shift_id IS NULL THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Shift not found';
     END IF;
 
@@ -70,8 +70,8 @@ BEGIN
     WHERE VolunteerID = p_VolunteerID AND ShiftID = p_ShiftID
     FOR UPDATE;
 
-    
-    IF existing IS NULL THEN 
+
+    IF existing IS NULL THEN
         IF (p_Status IS NOT NULL AND p_Status <> 'Scheduled')
            OR p_CheckInTime IS NOT NULL OR p_CheckOutTime IS NOT NULL THEN
             SIGNAL SQLSTATE '45000'

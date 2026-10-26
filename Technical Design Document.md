@@ -155,7 +155,7 @@ erDiagram
     Volunteer {
         INT VolunteerID PK
         VARCHAR_100 VolunteerName
-        VARCHAR_25 VolunteerPhoneNumber
+        VARCHAR_20 VolunteerPhoneNumber
         VARCHAR_100 VolunteerEmail
         BOOLEAN BackgroundCheck
     }
@@ -165,13 +165,14 @@ erDiagram
         VARCHAR_40 Status
         DATETIME CheckInTime
         DATETIME CheckOutTime
+        BOOLEAN HoursApproved
         INT ApprovedBy FK
-        DATETIME_6 ApprovedAt
+        DATETIME ApprovedAt
     }
     VolunteerHours {
         INT VolunteerID PK, FK
         INT ShiftID PK, FK
-        DECIMAL_8_2 HoursWorked
+        DECIMAL_5_2 HoursWorked
     }
     Skill {
         INT SkillCode PK
@@ -224,7 +225,7 @@ Volunteer(VolunteerID PK, VolunteerName, VolunteerPhoneNumber,
 VolunteerShift(VolunteerID PK/FK -> Volunteer.VolunteerID,
                ShiftID PK/FK -> Shift.ShiftID, Status,
                CheckInTime, CheckOutTime,
-               ApprovedBy FK -> StaffMember.StaffID, HoursApproved, ApprovedBy, ApprovedAt)
+               HoursApproved, ApprovedBy FK -> StaffMember.StaffID, ApprovedAt)
 VolunteerHours(VolunteerID PK, ShiftID PK, HoursWorked,
                FK (VolunteerID, ShiftID)
                    -> VolunteerShift(VolunteerID, ShiftID))
@@ -251,7 +252,7 @@ Unless marked nullable, columns are NOT NULL. Integer surrogate primary keys use
 | StaffRole | VARCHAR(20) | Required | CHECK: Manager, Event Coordinator, or Staff Member |
 | DbUsername | VARCHAR(32) | Required | UQ; individual database username |
 
-Operational usernames are unique across allowed account hosts; anonymous accounts and shared staff accounts are excluded. Use a case-sensitive comparison for identity mapping, matching the account provisioning convention. MySQL roles and StaffRole must agree; provisioning and role changes update both under administrator control. DbUsername uses the utf8mb4_bin collation so identity matching is case-sensitive.
+Operational usernames are unique across allowed account hosts; anonymous accounts and shared staff accounts are excluded. Use a case-sensitive comparison for identity mapping, matching the account provisioning convention. MySQL roles and StaffRole must agree; provisioning and role changes update both under administrator control. Routine identity comparisons explicitly apply utf8mb4_bin; the column itself uses the database collation.
 
 ### 7.2 Event
 
@@ -283,7 +284,7 @@ Both timestamp dates must equal EventDate. Overnight shifts are rejected.
 | VolunteerName | VARCHAR(100) | Required | Display/contact name |
 | VolunteerPhoneNumber | VARCHAR(20) | Required | Text preserves leading zeros, plus signs, and formatting |
 | VolunteerEmail | VARCHAR(100) | Required | Contact email; uniqueness is not required by the FDD |
-| BackgroundCheck | BOOLEAN | Required; FALSE | CHECK IN (0,1); current verified flag |
+| BackgroundCheck | BOOLEAN | Required; FALSE | MySQL BOOLEAN alias; current verified flag (no separate 0/1 CHECK in the current schema) |
 
 No background-check documents, expiration dates, or sensitive background-check details are stored.
 
@@ -296,10 +297,11 @@ No background-check documents, expiration dates, or sensitive background-check d
 | Status | VARCHAR(40) | Required; Scheduled | Allowed values below |
 | CheckInTime | DATETIME | Nullable; NULL | Actual attendance start |
 | CheckOutTime | DATETIME | Nullable; NULL | Actual attendance end |
+| HoursApproved | BOOLEAN | Nullable; FALSE | Retained approval flag; procedure sets TRUE on approval |
 | ApprovedBy | INT | Nullable; NULL | FK to StaffMember; procedure-managed |
-| ApprovedAt | DATETIME(6) | Nullable; NULL | UTC approval time; procedure-managed |
+| ApprovedAt | DATETIME | Nullable; NULL | UTC approval time; procedure-managed |
 
-There is no separately stored HoursApproved flag: approval is derived from ApprovedAt IS NOT NULL. ApprovedBy and ApprovedAt must both be NULL or both non-NULL; non-NULL approval requires Completed status.
+The current schema retains HoursApproved (BOOLEAN, nullable with default FALSE); ApproveHours sets it TRUE together with ApprovedBy and ApprovedAt. ApprovedAt remains the authoritative approval indicator for reports; the acceptance diagnostics flag any disagreement. ApprovedBy and ApprovedAt must both be NULL or both non-NULL; non-NULL approval requires Completed status.
 
 | Status | CheckInTime | CheckOutTime |
 |---|---|---|
@@ -329,7 +331,7 @@ After approval, no column of the assignment can change (BR-24). Test T09 verifie
 |---|---|---|---|
 | VolunteerID | INT | Required | Composite PK; component of assignment FK |
 | ShiftID | INT | Required | Composite PK; component of assignment FK |
-| HoursWorked | DECIMAL(8,2) | Required | CHECK > 0; approval-time calculated hours |
+| HoursWorked | DECIMAL(5,2) | Required | CHECK > 0; approval-time calculated hours |
 
 Hours are calculated at approval as ROUND(TIMESTAMPDIFF(SECOND, CheckInTime, CheckOutTime) / 3600.0, 2). ApproveHours rejects a rounded result of zero or less. No manual edits or duplicate approval records are permitted (FRD BR-22, BR-36)
 
@@ -476,44 +478,45 @@ The required “trigger making an update” demonstration is satisfied by a prop
 
 ### 10.4 Build and initial-data process
 
-The final repository must provide an entry script and documented commands that obtain the repository and build a fresh schema with fictional initial data. Build order: setup (restricted definer account), tables, routines, triggers, roles and grants, seed data, account provisioning, then the approval seed scripts run as the coordinator accounts.” Replace “Internal seed routines may be executed by the deployment account” (in 10.5) with “Seed approvals are run by the coordinator test accounts, since ApproveHours accepts only a connected Event Coordinator.
+The repository provides make_build_all.sh, which generates build_all.sql in this order: restricted definer account, tables, routines, triggers, fictional seed data, and roles/grants. Account provisioning is separate. The initial seed contains attendance but no approved hours; approvals are exercised through the connected coordinator accounts by the acceptance runner. Report SELECT files and test fixtures are excluded from the generated build.
 
 Privileged account provisioning is a separate, documented deployment step and uses local secrets. No password is committed. The build must stop on SQL errors; do not conceal errors with force/continue options. Document required working directory and paths. Keep reset/drop behavior explicit and limited to the project's test database. A fresh build is verified from a clean checkout, rather than assuming the existing developer database proves reproducibility.
 
 ### 10.5 Concrete deployment and build contract
 
-he reference database is volunteer_db. Use InnoDB and utf8mb4 with strict SQL mode. SaveAssignment sets READ COMMITTED for its own transaction, so no connection-level setting is required. Shift and attendance times are event-local values supplied explicitly; approval and audit times use UTC_TIMESTAMP(6)
+The reference database is volunteer_db. Use InnoDB and utf8mb4 with strict SQL mode. SaveAssignment sets READ COMMITTED for its own transaction, so no connection-level setting is required. Shift and attendance times are event-local values supplied explicitly; approval and audit times use UTC_TIMESTAMP(6)
 
-Recommended repository layout:
+Current delivery layout:
 
 ```text
-build.sql
+build_all.sql
+make_build_all.sh
 volunteer_DB/
-  00_setup/accounts.sql
+  00_setup/account.sql
   01_tables/tables.sql
-  02_routines/routines.sql
-  03_triggers/triggers.sql
-  04_seed/sample_data.sql
-  05_reports/reports.sql
-  06_tests/acceptance.sql
+  02_routines/01_save_assigment_procedure.sql
+  02_routines/02_apporve_hours_procedures.sql
+  03_triggers/*.sql
+  04_seed/01_sample_data.sql
+  05_reports/01_*.sql ... 10_*.sql
+  06_tests/run_tests.py
+  06_tests/01_environment_and_invariants.sql
   07_security/roles.sql
-scripts/
-  provision_accounts.sql.example
-  seed_approvals_coord1.sql
-  seed_approvals_coord2.sql
+docs/er/
 ```
 
-build.sql drops and recreates volunteer_db and is intended for the project’s test database only; it must not be pointed at any other database. It must be run from the repository root.
+build_all.sql drops and recreates volunteer_db and is intended for a disposable project test database only. Run the generator from the repository root and use the test README for acceptance execution.
 
 Reference fresh-checkout invocation (requires the completed build files and configured MySQL login path):
 
 ```sh
 git clone https://github.com/parraxc/Volunteer-and-Community-Service-Management-System.git
 cd Volunteer-and-Community-Service-Management-System
-mysql --login-path=volunteer-build --show-warnings < build.sql
+sh make_build_all.sh
+mysql --login-path=volunteer-build --show-warnings < build_all.sql
 ```
 
-The build account is an administrative deployment identity, not a Manager account. Credential setup uses a local login configuration or secret store, never a plaintext repository file. Operational accounts and the restricted routine definer are provisioned by deployment SQL after their required objects exist. Internal seed routines may be executed by the deployment account, but operational accounts must already have valid StaffMember mappings before their writes are tested.
+The build account is an administrative deployment identity, not a Manager account. Credential setup uses a local login configuration or secret store, never a plaintext repository file. Operational accounts and the restricted routine definer are provisioned by deployment SQL after their required objects exist. Seed approvals are not part of the build; the acceptance runner creates role-specific accounts and StaffMember mappings before calling the procedures.
 
 Environment evidence query, run in each demonstration connection:
 
@@ -695,3 +698,7 @@ For T16, issue KILL CONNECTION against the exact test session ID using a deploym
 | FR-19 | Event, Shift, and StaffMember BEFORE UPDATE triggers | T21 |
 
 All BR-01–BR-37 are mapped in section 9.1. Every RQ-01–RQ-10 is specified in section 11 and verified under T19 with additional RQ-07/RQ-06 fixtures in T23. Performance, architecture, and security requirements are addressed in sections 4, 10.6, and 12.
+
+## Implementation delivery cross-reference — October 25, 2026
+
+The ten RQ scripts are in `volunteer_DB/05_reports`, with filter/permission examples in its README. The actual integration runner is `volunteer_DB/06_tests/run_tests.py`, with read-only diagnostics in `01_environment_and_invariants.sql`; these replace earlier illustrative acceptance filenames. The full ER deliverable is in `docs/er` (Chen and physical SVGs with editable sources). Build entry is `sh make_build_all.sh`, then deliberate execution of the generated `build_all.sql` against a disposable course database; the generator excludes reports and tests. See `docs/COMPLETION-NOTES.md` for prerequisite fixes and verification limits. Integration test outcomes and the installed server version remain to be recorded by the team; no runtime pass is implied by this document.

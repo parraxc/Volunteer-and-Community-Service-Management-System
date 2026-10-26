@@ -1,30 +1,30 @@
 DELIMITER $$
 
-CREATE PROCEDURE ApproveHours (IN p_volunteerID INT, IN p_shiftID INT) 
-SQL SECURITY DEFINER 
-BEGIN 
-    DECLARE staffID    INT;
-    DECLARE staffRole   VARCHAR(20);
+CREATE DEFINER = 'volunteer_proc'@'localhost' PROCEDURE ApproveHours (IN p_volunteerID INT, IN p_shiftID INT)
+SQL SECURITY DEFINER
+BEGIN
+    DECLARE v_staff_id INT;
+    DECLARE v_staff_role VARCHAR(20);
     DECLARE volunteerLocked   INT;
-    DECLARE eventID    INT;
-    DECLARE coordID    INT;
+    DECLARE v_event_id INT;
+    DECLARE v_coord_id INT;
     DECLARE volunteerStatus      VARCHAR(12);
     DECLARE checkIn    DATETIME;
     DECLARE checkOut   DATETIME;
-    DECLARE approvedAt DATETIME(6);
+    DECLARE v_approved_at DATETIME(6);
     DECLARE totalHours       DECIMAL(8,2);
 
-    DECLARE EXIT HANDLER FOR SQLEXCEPTION 
-    BEGIN 
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
         ROLLBACK;
         RESIGNAL;
     END;
-    
-    SELECT StaffID, StaffRole INTO staffID, staffRole
+
+    SELECT StaffID, StaffRole INTO v_staff_id, v_staff_role
     FROM StaffMember
     WHERE DbUsername COLLATE utf8mb4_bin = SUBSTRING_INDEX(USER(), '@', 1);
 
-    IF staffID IS NULL OR staffRole <> 'Event Coordinator' THEN
+    IF v_staff_id IS NULL OR v_staff_role <> 'Event Coordinator' THEN
         SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Caller is not a registered Event Coordinator';
     END IF;
@@ -37,18 +37,18 @@ BEGIN
     WHERE VolunteerID = p_VolunteerID
     FOR UPDATE;
 
-    SELECT EventID INTO eventID
+    SELECT EventID INTO v_event_id
     FROM Shift
     WHERE ShiftID = p_shiftID
     FOR UPDATE;
 
-    SELECT CoordinatorID INTO coordID
+    SELECT CoordinatorID INTO v_coord_id
     FROM Event
-    WHERE EventID = event_id
+    WHERE EventID = v_event_id
     FOR UPDATE;
 
     SELECT Status, CheckInTime, CheckOutTime, ApprovedAt
-      INTO volunteerStatus, checkIn, checkOut, approvedAt
+      INTO volunteerStatus, checkIn, checkOut, v_approved_at
     FROM VolunteerShift
     WHERE VolunteerID = p_VolunteerID AND ShiftID = p_shiftID
     FOR UPDATE;
@@ -58,7 +58,7 @@ BEGIN
             SET MESSAGE_TEXT = 'Assignment not found';
     END IF;
 
-     IF coord_id <> staffID THEN
+     IF v_coord_id IS NULL OR v_coord_id <> v_staff_id THEN
         SIGNAL SQLSTATE '45000'
             SET MESSAGE_TEXT = 'Only the event''s assigned Event Coordinator can approve these hours';
     END IF;
@@ -68,7 +68,7 @@ BEGIN
             SET MESSAGE_TEXT = 'Only a Completed assignment can be approved';
     END IF;
 
-    IF approvedAt IS NOT NULL
+    IF v_approved_at IS NOT NULL
        OR EXISTS (SELECT 1 FROM VolunteerHours
                   WHERE VolunteerID = p_VolunteerID AND ShiftID = p_ShiftID) THEN
         SIGNAL SQLSTATE '45000'
@@ -83,7 +83,8 @@ BEGIN
     END IF;
 
     UPDATE VolunteerShift
-    SET ApprovedBy = staffID,
+    SET HoursApproved = TRUE,
+        ApprovedBy = v_staff_id,
         ApprovedAt = UTC_TIMESTAMP(6)
     WHERE VolunteerID = p_VolunteerID AND ShiftID = p_ShiftID;
 

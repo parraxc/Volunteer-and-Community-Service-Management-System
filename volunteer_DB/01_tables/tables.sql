@@ -1,7 +1,3 @@
-DROP DATABASE IF EXISTS volunteer_db;
-CREATE DATABASE volunteer_db;
-USE volunteer_db;
-
 -- ===== volunteer_DB/01_tables/tables.sql =====
 
 CREATE TABLE StaffMember (
@@ -82,6 +78,8 @@ CREATE TABLE VolunteerHours(
     PRIMARY KEY (VolunteerID, ShiftID),
     FOREIGN KEY (VolunteerID) REFERENCES Volunteer(VolunteerID),
     FOREIGN KEY (ShiftID) REFERENCES Shift(ShiftID),
+    CONSTRAINT fk_hours_assignment FOREIGN KEY (VolunteerID, ShiftID)
+        REFERENCES VolunteerShift (VolunteerID, ShiftID),
     CONSTRAINT chk_vhours CHECK (HoursWorked > 0)
 
 );

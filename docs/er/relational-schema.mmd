@@ -1,0 +1,72 @@
+erDiagram
+    StaffMember {
+        INT StaffID PK
+        VARCHAR_100_ StaffName
+        VARCHAR_20_ StaffRole
+        VARCHAR_32_ DbUsername UK
+    }
+    Event {
+        INT EventID PK
+        VARCHAR_150_ EventName
+        DATE EventDate
+        INT CoordinatorID FK
+    }
+    Shift {
+        INT ShiftID PK
+        INT EventID FK
+        VARCHAR_100_ ShiftRole
+        INT Capacity
+        DATETIME StartDateTime
+        DATETIME EndDateTime
+    }
+    Volunteer {
+        INT VolunteerID PK
+        VARCHAR_100_ VolunteerName
+        VARCHAR_20_ VolunteerPhoneNumber
+        VARCHAR_100_ VolunteerEmail
+        BOOLEAN BackgroundCheck
+    }
+    VolunteerShift {
+        INT VolunteerID PK, FK
+        INT ShiftID PK, FK
+        VARCHAR_40_ Status
+        DATETIME CheckInTime "nullable"
+        DATETIME CheckOutTime "nullable"
+        BOOLEAN HoursApproved "nullable"
+        INT ApprovedBy FK "nullable"
+        DATETIME ApprovedAt "nullable"
+    }
+    VolunteerHours {
+        INT VolunteerID PK, FK
+        INT ShiftID PK, FK
+        DECIMAL_5_2_ HoursWorked
+    }
+    Skill {
+        INT SkillCode PK
+        VARCHAR_50_ SkillName UK
+        VARCHAR_100_ SkillDescription
+    }
+    VolunteerSkill {
+        INT VolunteerID PK, FK
+        INT SkillCode PK, FK
+    }
+    AuditLog {
+        BIGINT_UNSIGNED AuditID PK
+        VARCHAR_64_ TableName
+        ENUM__INSERT____UPDATE__ Operation
+        VARCHAR_100_ RecordId
+        VARCHAR_288_ ChangedBy
+        INT ChangedByStaffID FK "nullable"
+        DATETIME_6_ ChangedAt
+        JSON OldValues "nullable"
+        JSON NewValues
+    }
+    StaffMember ||--o{ Event : "coordinates"
+    Event ||--o{ Shift : "contains"
+    Volunteer ||--o{ VolunteerShift : "receives"
+    Shift ||--o{ VolunteerShift : "includes"
+    VolunteerShift ||--o| VolunteerHours : "produces approved hours"
+    StaffMember o|--o{ VolunteerShift : "approves"
+    Volunteer ||--o{ VolunteerSkill : "has"
+    Skill ||--o{ VolunteerSkill : "classifies"
+    StaffMember o|--o{ AuditLog : "attributed to"

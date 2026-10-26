@@ -2,8 +2,8 @@ DELIMITER $$
 
 CREATE TRIGGER volunteershift_before_insert
 BEFORE INSERT ON VolunteerShift
-FOR EACH ROW 
-BEGIN 
+FOR EACH ROW
+BEGIN
 
     DECLARE is_verf BOOLEAN;
     DECLARE cap INT;
@@ -26,7 +26,7 @@ BEGIN
         SET MESSAGE_TEXT = "Volunteer's background check is false";
     END IF;
 
-    SELECT Capacity,StartDateTime,EndDateTime 
+    SELECT Capacity,StartDateTime,EndDateTime
     INTO cap,startTime,endTime
     FROM Shift
     WHERE ShiftID = NEW.ShiftID
@@ -44,14 +44,14 @@ BEGIN
     END IF;
 
     SELECT COUNT(*) INTO overlapping
-    FROM Shift s 
+    FROM Shift s
     INNER JOIN VolunteerShift vs ON vs.ShiftID = s.ShiftID
     WHERE vs.VolunteerID = NEW.VolunteerID
         AND vs.status <> 'Cancelled'
         AND s.StartDateTime < endTime
         AND s.EndDateTime > startTime;
 
-    IF (overlapping > 0) THEN 
+    IF (overlapping > 0) THEN
         SIGNAL SQLSTATE '45500'
         SET MESSAGE_TEXT = "Shift overlaps with another shift.";
     END IF;
@@ -59,7 +59,7 @@ BEGIN
 END $$
 
 CREATE TRIGGER volunteershift_before_update
-BEFORE UPDATE ON VolunteerShift 
+BEFORE UPDATE ON VolunteerShift
 FOR EACH ROW
 BEGIN
 
@@ -72,7 +72,7 @@ BEGIN
     DECLARE overlapping INT DEFAULT 0;
     DECLARE derived VARCHAR(12);
 
-    IF (OLD.ApprovedAt IS NOT NULL) THEN 
+    IF (OLD.ApprovedAt IS NOT NULL) THEN
         SIGNAL SQLSTATE '45500'
         SET MESSAGE_TEXT = "Can't change volunteershift after hours are approved.";
     END IF;
@@ -116,7 +116,7 @@ BEGIN
     FROM Shift s
     INNER JOIN Event e ON e.EventID = s.EventID
     WHERE s.ShiftID = NEW.ShiftID;
-    
+
     IF NEW.CheckInTime IS NOT NULL AND NOT (NEW.CheckInTime <=> OLD.CheckInTime)
        AND (NEW.CheckInTime < startTime OR NEW.CheckInTime >= endTime) THEN
             SIGNAL SQLSTATE '45000'
@@ -139,7 +139,7 @@ BEGIN
             SET MESSAGE_TEXT = "Volunteer's background check is false";
         END IF;
 
-        SELECT Capacity,StartDateTime,EndDateTime 
+        SELECT Capacity,StartDateTime,EndDateTime
             INTO cap,startTime,endTime
         FROM Shift
         WHERE ShiftID = NEW.ShiftID
@@ -156,14 +156,14 @@ BEGIN
         END IF;
 
         SELECT COUNT(*) INTO overlapping
-        FROM Shift s 
-        INNER JOIN VolunteerShift vs ON vs.ShifID = s.ShiftID
+        FROM Shift s
+        INNER JOIN VolunteerShift vs ON vs.ShiftID = s.ShiftID
         WHERE vs.VolunteerID = NEW.VolunteerID
             AND vs.status <> 'Cancelled'
             AND s.StartDateTime < endTime
             AND s.EndDateTime > startTime;
 
-        IF (overlapping > 0) THEN 
+        IF (overlapping > 0) THEN
             SIGNAL SQLSTATE '45500'
             SET MESSAGE_TEXT = "Shift overlaps with another shift.";
         END IF;
@@ -175,7 +175,7 @@ CREATE TRIGGER volunteershift_before_delete
 BEFORE DELETE ON VolunteerShift
 FOR EACH ROW
 BEGIN
-    SIGNAL SQLSTATE '45000' 
+    SIGNAL SQLSTATE '45000'
     SET MESSAGE_TEXT = 'Deletion from the voluneershift is strictly prohibited.';
 END  $$
 
