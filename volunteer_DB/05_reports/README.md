@@ -1,4 +1,4 @@
-# Reports (FRD v1.4)
+# Reports (FRD v1.5)
 
 These are read-only SQL queries, not definer views/routines. Existing table grants enforce access. Run each in a MySQL connection logged in as the intended role. They are deliberately excluded from the schema build. Unset MySQL user variables are NULL; initialize filters explicitly in reused connections.
 
