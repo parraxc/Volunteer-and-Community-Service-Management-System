@@ -5,6 +5,9 @@ GRANT SELECT, UPDATE         ON volunteer_db.Event          TO 'volunteer_proc'@
 GRANT SELECT, INSERT, UPDATE ON volunteer_db.VolunteerShift TO 'volunteer_proc'@'localhost';
 GRANT SELECT, INSERT         ON volunteer_db.VolunteerHours TO 'volunteer_proc'@'localhost';
 
+GRANT EXECUTE ON PROCEDURE volunteer_db.SaveAssignment TO 'volunteer_proc'@'localhost';
+GRANT EXECUTE ON PROCEDURE volunteer_db.ApproveHours   TO 'volunteer_proc'@'localhost';
+
 CREATE ROLE IF NOT EXISTS 'manager_role', 'coordinator_role', 'staff_role';
 
 GRANT SELECT, INSERT, UPDATE ON volunteer_db.StaffMember    TO 'manager_role';
@@ -33,3 +36,5 @@ GRANT SELECT ON volunteer_db.Volunteer      TO 'staff_role';
 GRANT SELECT ON volunteer_db.Skill          TO 'staff_role';
 GRANT SELECT ON volunteer_db.VolunteerSkill TO 'staff_role';
 GRANT SELECT ON volunteer_db.VolunteerShift TO 'staff_role';
+
+FLUSH PRIVILEGES;

@@ -3,13 +3,10 @@ DROP DATABASE IF EXISTS volunteer_db;
 CREATE DATABASE volunteer_db CHARACTER SET utf8mb4;
 USE volunteer_db;
 SET SESSION time_zone = '+00:00';
-
--- ===== volunteer_DB/00_setup/account.sql =====
 DROP USER IF EXISTS 'volunteer_proc'@'localhost';
 CREATE USER 'volunteer_proc'@'localhost' ACCOUNT LOCK;
 
 
--- ===== volunteer_DB/01_tables/tables.sql =====
 -- ===== volunteer_DB/01_tables/tables.sql =====
 
 CREATE TABLE StaffMember (
@@ -125,7 +122,6 @@ CREATE TABLE AuditLog (
     INDEX idx_audit_staff  (ChangedByStaffID, ChangedAt)
 );
 
--- ===== volunteer_DB/02_routines/01_save_assigment_procedure.sql =====
 DELIMITER $$
 
 CREATE DEFINER = 'volunteer_proc'@'localhost' PROCEDURE SaveAssignment (
@@ -235,7 +231,6 @@ END $$
 DELIMITER ;
 
 
--- ===== volunteer_DB/02_routines/02_apporve_hours_procedures.sql =====
 DELIMITER $$
 
 CREATE DEFINER = 'volunteer_proc'@'localhost' PROCEDURE ApproveHours (IN p_volunteerID INT, IN p_shiftID INT)
@@ -340,7 +335,6 @@ END $$
 DELIMITER ;
 
 
--- ===== volunteer_DB/03_triggers/01_event_triggers.sql =====
 DELIMITER $$
 
 CREATE TRIGGER Event_before_insert
@@ -393,7 +387,6 @@ DELIMITER ;
     
     
 
--- ===== volunteer_DB/03_triggers/02_shift_triggers.sql =====
 DELIMITER $$
 
 CREATE TRIGGER Shift_before_insert
@@ -452,7 +445,6 @@ DELIMITER ;
 
 
 
--- ===== volunteer_DB/03_triggers/03_volunteershift_triggers.sql =====
 DELIMITER $$
 
 CREATE TRIGGER volunteershift_before_insert
@@ -637,7 +629,6 @@ END  $$
 DELIMITER ;
 
 
--- ===== volunteer_DB/03_triggers/04_volunteerhours_triggers.sql =====
 DELIMITER $$
 
 CREATE TRIGGER prevent_volunteerhours_update
@@ -660,7 +651,6 @@ END  $$
 DELIMITER ;
 
 
--- ===== volunteer_DB/03_triggers/05_auditlog_triggers.sql =====
 DELIMITER $$
 
 CREATE TRIGGER prevent_auditlog_delete
@@ -857,7 +847,6 @@ END $$
 DELIMITER ;
 
 
--- ===== volunteer_DB/03_triggers/06_staffmember_triggers.sql =====
 -- FR-19 / BR-33: do not invalidate an event's coordinator by editing the staff role.
 DELIMITER $$
 CREATE TRIGGER staffmember_before_update
@@ -874,7 +863,6 @@ END $$
 DELIMITER ;
 
 
--- ===== volunteer_DB/04_seed/01_sample_data.sql =====
 
 INSERT INTO StaffMember (StaffID, StaffName, StaffRole, DbUsername) VALUES
     (1,'Smith Pill', 'Manager', 'mgr_test'),
@@ -956,13 +944,15 @@ UPDATE VolunteerShift SET CheckInTime='2026-10-03 11:10:00' WHERE VolunteerID=5 
 UPDATE VolunteerShift SET Status='No-Show'   WHERE VolunteerID=3 AND ShiftID=1;
 UPDATE VolunteerShift SET Status='Cancelled' WHERE VolunteerID=8 AND ShiftID=2;
 
--- ===== volunteer_DB/07_security/roles.sql =====
 GRANT SELECT                 ON volunteer_db.StaffMember    TO 'volunteer_proc'@'localhost';
 GRANT SELECT, UPDATE         ON volunteer_db.Volunteer      TO 'volunteer_proc'@'localhost';
 GRANT SELECT, UPDATE         ON volunteer_db.Shift          TO 'volunteer_proc'@'localhost';
 GRANT SELECT, UPDATE         ON volunteer_db.Event          TO 'volunteer_proc'@'localhost';
 GRANT SELECT, INSERT, UPDATE ON volunteer_db.VolunteerShift TO 'volunteer_proc'@'localhost';
 GRANT SELECT, INSERT         ON volunteer_db.VolunteerHours TO 'volunteer_proc'@'localhost';
+
+GRANT EXECUTE ON PROCEDURE volunteer_db.SaveAssignment TO 'volunteer_proc'@'localhost';
+GRANT EXECUTE ON PROCEDURE volunteer_db.ApproveHours   TO 'volunteer_proc'@'localhost';
 
 CREATE ROLE IF NOT EXISTS 'manager_role', 'coordinator_role', 'staff_role';
 
@@ -992,3 +982,6 @@ GRANT SELECT ON volunteer_db.Volunteer      TO 'staff_role';
 GRANT SELECT ON volunteer_db.Skill          TO 'staff_role';
 GRANT SELECT ON volunteer_db.VolunteerSkill TO 'staff_role';
 GRANT SELECT ON volunteer_db.VolunteerShift TO 'staff_role';
+
+FLUSH PRIVILEGES;
+

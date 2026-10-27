@@ -1,0 +1,334 @@
+{
+  "server_version": "26.7.0",
+  "source_commit": "8c6e58ad41bf671a1b5a91653717af92fc4ec9ce",
+  "working_tree_dirty": true,
+  "note": "Fixture rows remain until rebuild; results describe the tested checkout, including any working-tree changes.",
+  "passed": 81,
+  "failed": 0,
+  "tests": [
+    {
+      "test": "FR-01..07 fixture entities and M:N skill memberships",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-05 invalid event coordinator rejected",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-06 invalid staff role rejected",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-07 capacity and chronological constraints",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-08 shift outside event date rejected",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-03 missing parent event rejected",
+      "status": "PASS"
+    },
+    {
+      "test": "hours require exact assignment",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-26 duplicate login rejected",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-09 unverified volunteer rejected",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-37 nonexistent volunteer rejected",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-37 nonexistent shift rejected",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-34 new attendance rejected",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-05 assignment succeeds through procedure",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-08 duplicate assignment rejected",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-11 full shift rejected",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-10 overlap rejected",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-10 back-to-back accepted",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-34 new non-Scheduled assignment rejected",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-20 cancel scheduled assignment",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-11 cancellation frees capacity",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-20 reactivation on full shift rejected",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-20 cancel replacement",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-20 reactivation with free capacity succeeds",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-09 verify volunteer then assign",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-17 early check-in rejected",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-17 check-in at end rejected",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-17 check-in derives In-Progress",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-18 reversed checkout rejected",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-17 next-day checkout rejected",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-17 checkout derives Completed",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-20 completed assignment cannot cancel",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-16 completed requires times",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-17 contradictory status rejected",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-17 both times derive Completed",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-14 wrong coordinator cannot approve",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-12 incomplete assignment cannot approve",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-13 approve 3.00 hours",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-22 duplicate approval rejected",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-24 approved attendance immutable",
+      "status": "PASS"
+    },
+    {
+      "test": "approval flag agrees with metadata",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-28 approver comes from actual account",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-19 assignment DELETE blocked by trigger",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-36 hours UPDATE blocked by trigger",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-36 hours DELETE blocked by trigger",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-30 audit UPDATE blocked by trigger",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-30 audit DELETE blocked by trigger",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-19 event date immutable with shifts",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-19 shift capacity immutable with assignments",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-19 coordinator role protected",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-19 empty shift edits allowed",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-15 staff can read volunteer data",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-15 denied staff write",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-15 denied coordinator event write",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-15 denied direct assignment write",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-15 denied direct hours insert",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-15 denied manager approval",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-15 denied manager assignment",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-15 denied staff approved-hours read",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-15 denied coordinator audit read",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-15 denied staff delete",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-16 mapped actor and audit before/after images",
+      "status": "PASS"
+    },
+    {
+      "test": "transaction rollback removes data and audit together",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-20 No-Show is final",
+      "status": "PASS"
+    },
+    {
+      "test": "BR-22 rounded-zero approval rolled back",
+      "status": "PASS"
+    },
+    {
+      "test": "failed approval leaves no hours or metadata",
+      "status": "PASS"
+    },
+    {
+      "test": "RQ-01 directory includes all fixture volunteers",
+      "status": "PASS"
+    },
+    {
+      "test": "RQ-02 roster filters cancelled rows",
+      "status": "PASS"
+    },
+    {
+      "test": "RQ-03 empty and full capacities",
+      "status": "PASS"
+    },
+    {
+      "test": "RQ-04 pending excludes approved hours",
+      "status": "PASS"
+    },
+    {
+      "test": "RQ-05 inclusive date range and zero-hour volunteers",
+      "status": "PASS"
+    },
+    {
+      "test": "RQ-06 distinct volunteer across two shifts",
+      "status": "PASS"
+    },
+    {
+      "test": "RQ-07 skill search handles M:N",
+      "status": "PASS"
+    },
+    {
+      "test": "RQ-08 only unverified volunteers",
+      "status": "PASS"
+    },
+    {
+      "test": "RQ-09 attendance retains No-Show and Cancelled",
+      "status": "PASS"
+    },
+    {
+      "test": "RQ-10 manager audit filtering and ordering",
+      "status": "PASS"
+    },
+    {
+      "test": "RQ-10 coordinator cannot execute audit report",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-18 two sessions contend for final capacity slot",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-18 two sessions contend for overlapping assignments",
+      "status": "PASS"
+    },
+    {
+      "test": "FR-18 simultaneous approval creates one hours record",
+      "status": "PASS"
+    },
+    {
+      "test": "killed transaction rolls back data and audit",
+      "status": "PASS"
+    },
+    {
+      "test": "final global integrity invariants",
+      "status": "PASS"
+    }
+  ]
+}

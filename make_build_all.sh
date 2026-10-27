@@ -9,11 +9,13 @@ CREATE DATABASE volunteer_db CHARACTER SET utf8mb4;
 USE volunteer_db;
 SET SESSION time_zone = '+00:00';
 EOF
+
 for dir in 00_setup 01_tables 02_routines 03_triggers 04_seed 07_security; do
   for f in volunteer_DB/"$dir"/*.sql; do
-    printf '\n-- ===== %s =====\n' "$f" >> "$OUT"
+    [ -e "$f" ] || continue
     cat "$f" >> "$OUT"
-    printf '\n' >> "$OUT"
+    printf '\n\n' >> "$OUT"
   done
 done
+
 printf 'Wrote %s (reports and tests run separately)\n' "$OUT"
